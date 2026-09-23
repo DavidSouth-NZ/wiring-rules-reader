@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Your PDF is stored separately in the browser's IndexedDB, not here.
-const CACHE = 'wrr-v2';
+const CACHE = 'wrr-v4';
 const SHELL = ['./', 'index.html', 'app.js', 'changes.js', 'manifest.webmanifest', 'vendor/pdf.min.js', 'vendor/pdf.worker.min.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/favicon-64.png',
   ...['FoxitDingbats.pfb','FoxitFixed.pfb','FoxitFixedBold.pfb','FoxitFixedBoldItalic.pfb','FoxitFixedItalic.pfb','FoxitSerif.pfb','FoxitSerifBold.pfb','FoxitSerifBoldItalic.pfb','FoxitSerifItalic.pfb','FoxitSymbol.pfb','LiberationSans-Bold.ttf','LiberationSans-BoldItalic.ttf','LiberationSans-Italic.ttf','LiberationSans-Regular.ttf'].map(f => 'vendor/standard_fonts/' + f)];

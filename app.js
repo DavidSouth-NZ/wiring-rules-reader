@@ -1,7 +1,7 @@
 // Wiring Rules Reader — offline PDF reader with contents, tables, index, search and bookmarks.
 // Everything runs on the device. The PDF is never uploaded.
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS } from './changes.js';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
@@ -1334,6 +1334,8 @@ function renderChanges() {
   html += `<div class="ch-intro"><h2>2007 → 2018: what changed</h2><p>A New Zealand quick reference. Tap a clause number to open it. This is a summary written for this app, not the Standard's wording, so always read the clause itself.</p></div>`;
   html += `<div class="countdown"><div class="cd-num">${dl > 0 ? dl : '✓'}</div><div><b>${dl > 0 ? `day${dl === 1 ? '' : 's'} until the 2018 edition is mandatory for new work` : 'The 2018 edition is mandatory for new work'}</b><span>${dl > 0 ? 'From 13 November 2026 under the Electricity (Safety) Regulations. You can use it now.' : 'Since 13 November 2026. Work started under the 2007 edition in the transition year had to be finished by 12 November 2026.'}</span></div></div>`;
   html += `<details class="ch-sec"${prefs.get('chOpenTimeline', false) ? ' open' : ''} data-pref="chOpenTimeline"><summary>NZ transition rules</summary>${TIMELINE.map(t => `<div class="tl"><span>${esc(t.when)}</span><p>${esc(t.what)}</p></div>`).join('')}</details>`;
+  // pinned highlights
+  html += HIGHLIGHTS.map(h => `<div class="ch-alert"><div class="ch-alert-top">${icon('delta')}<span>Check on site</span></div><h3>${esc(h.head)}</h3><p>${esc(h.text)}</p><ul>${h.bullets.map(b => `<li>${esc(b)}</li>`).join('')}</ul><div>${refChips(h.refs)}</div>${h.source ? `<p class="fine">Source: <a href="${esc(h.source.url)}" target="_blank" rel="noopener">${esc(h.source.label)}</a>, checked against the clauses in the Standard.</p>` : ''}</div>`).join('');
   // amendment PDFs
   html += `<div class="group-h">Your amendment PDFs</div>`;
   if (S.amends?.length) html += S.amends.map(a => `<div class="amd-item"><span class="tag amd">${esc(a.short)}</span><button class="go" data-open="${esc(a.id)}"><b>${esc(a.label)}</b><span>${a.A.n} page${a.A.n > 1 ? 's' : ''} · mentions ${a.refs.size} clause${a.refs.size === 1 ? '' : 's'}, tables or figures</span></button><button class="mini" data-rm="${esc(a.id)}" aria-label="Remove ${esc(a.label)}">${icon('trash')}</button></div>`).join('');
@@ -1368,6 +1370,84 @@ $('#p-changes').addEventListener('click', e => {
   const nz = t.closest('[data-nz]'); if (nz) { const c = S._nz[+nz.dataset.nz]; go({ p: c.p, y: c.y, label: c.id }); }
 });
 $('#p-changes').addEventListener('toggle', e => { const d = e.target; if (d.dataset?.pref) prefs.set(d.dataset.pref, d.open); }, true);
+
+
+/* ================================================================== Zs CHECK (Table 8.1)
+   MCB limits are calculated, not copied: Zs = 230 V ÷ mean instantaneous tripping current
+   (Type B 4×In, C 7.5×In, D 12.5×In), rounded to 0.1 Ω. This matches every MCB value in
+   Table 8.1 of AS/NZS 3000:2018 (Amendment 3).                                           */
+const ZS_K = { B: 4, C: 7.5, D: 12.5 };
+const ZS_RATINGS = [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200];
+const zsMax = (t, In) => Math.floor(230 / (ZS_K[t] * In) * 10 + 0.5 + 1e-9) / 10;
+const zs = { t: prefs.get('zsType', 'C'), In: prefs.get('zsIn', 20), log: prefs.get('zsLog', []) };
+const fmtO = v => (Math.round(v * 100) / 100).toString();
+function renderZs() {
+  const el = $('#p-zs');
+  el.innerHTML = `<div class="zs">
+    <div class="zs-head"><div class="eyebrow">Table 8.1 · 230 V · 0.4 s</div><h2>Earth fault-loop check</h2><p>Pick the MCB, type your measured Zs, and see straight away if it's within the maximum.</p></div>
+    <div><div class="zs-lbl">MCB type</div><div class="zs-types" id="zsTypes">${Object.entries(ZS_K).map(([t, k]) => `<button data-t="${t}" aria-pressed="${zs.t === t}"><b>Type ${t}</b><span>${k}× In</span></button>`).join('')}</div></div>
+    <div><div class="zs-lbl"><span>Rating (A)</span></div><div class="zs-amps" id="zsAmps">${ZS_RATINGS.map(a => `<button data-a="${a}" aria-pressed="${zs.In === a}">${a}</button>`).join('')}</div></div>
+    <div><div class="zs-lbl"><span>Your reading</span></div><div class="zs-read">
+      <div class="zs-inwrap"><input id="zsIn" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-label="Measured earth fault-loop impedance in ohms"><span class="unit">Ω</span></div>
+      <div class="zs-max"><span id="zsMaxLbl">Max ${zs.t}${zs.In}</span><b id="zsMax">${zsMax(zs.t, zs.In)} Ω</b></div>
+    </div></div>
+    <div class="zs-result" id="zsResult" aria-live="polite"></div>
+    <div class="zs-actions"><input id="zsCct" placeholder="Circuit name (optional), e.g. Kitchen sockets" aria-label="Circuit name"><button class="btn primary" id="zsAdd">Add to log</button></div>
+    <div id="zsLog" class="zs-log"></div>
+    <div><div class="zs-lbl"><span>Maximum Zs (Ω), tap a cell to select</span></div><table class="zs-grid" id="zsGrid"><thead><tr><th>Amps</th><th>Type B</th><th>Type C</th><th>Type D</th></tr></thead><tbody>${ZS_RATINGS.map(a => `<tr data-row="${a}"><td>${a} A</td>${['B', 'C', 'D'].map(t => `<td data-t="${t}" data-a="${a}">${zsMax(t, a).toFixed(1)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="zs-note">Values are for MCBs on the final subcircuit, calculated the same way as Table 8.1: 230 V ÷ the mean instantaneous tripping current. They match the table in AS/NZS 3000:2018. A reading equal to the maximum passes. For fuses, EFL tester tolerances (AS/NZS 3017) and the test method, see <button id="zsOpenTbl">Table 8.1</button> and <button id="zsOpenCl">Clause 8.3.9</button> in your PDF.</p>
+  </div>`;
+  const inp = $('#zsIn');
+  inp.value = prefs.get('zsReading', '');
+  inp.addEventListener('input', () => { prefs.set('zsReading', inp.value); updateZs(); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#zsAdd').click(); } });
+  updateZs(); drawZsLog();
+}
+function zsReading() { const v = parseFloat(($('#zsIn')?.value || '').replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(v) ? v : null; }
+function updateZs() {
+  const max = zsMax(zs.t, zs.In);
+  $('#zsMax').textContent = max.toFixed(1) + ' Ω'; $('#zsMaxLbl').textContent = `Max ${zs.t}${zs.In}`;
+  $$('#zsTypes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === zs.t));
+  $$('#zsAmps button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.a === zs.In));
+  $$('#zsGrid td.sel, #zsGrid tr.sel').forEach(x => x.classList.remove('sel'));
+  const row = $(`#zsGrid tr[data-row="${zs.In}"]`); row?.classList.add('sel'); row?.querySelector(`td[data-t="${zs.t}"]`)?.classList.add('sel');
+  const r = zsReading(); const box = $('#zsResult');
+  box.className = 'zs-result';
+  if (r == null) { box.innerHTML = `<div class="zs-verdict"><div class="zs-dot">Ω</div><div><b style="color:var(--ink)">Enter your reading</b><span>Type B/C/D ${zs.In} A MCB: maximum ${max.toFixed(1)} Ω</span></div></div>`; return; }
+  const ok = r <= max + 1e-9; box.classList.add(ok ? 'ok' : 'bad');
+  const diff = Math.abs(max - r), pct = max ? Math.round(diff / max * 100) : 0;
+  const scale = max * 1.25, w = Math.min(100, r / scale * 100);
+  box.innerHTML = `<div class="zs-verdict"><div class="zs-dot">${ok ? '✓' : '✕'}</div><div><b>${ok ? 'Pass' : 'Fail: too high'}</b><span>${fmtO(r)} Ω ${ok ? `is within the ${max.toFixed(1)} Ω maximum · ${fmtO(diff)} Ω (${pct}%) to spare` : `is over the ${max.toFixed(1)} Ω maximum by ${fmtO(diff)} Ω (${pct}%)`}</span></div></div>
+    <div><div class="zs-gauge"><i style="width:${w}%"></i><em title="Maximum"></em></div><div class="zs-gauge-l"><span>0 Ω</span><span class="mx">max ${max.toFixed(1)}</span></div></div>`;
+}
+function drawZsLog() {
+  const el = $('#zsLog'); if (!el) return;
+  if (!zs.log.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="zs-lbl"><span>Test log · this device</span><span><button class="btn" id="zsCopy" style="height:28px;padding:0 10px">${icon('copy')}Copy</button> <button class="btn" id="zsClear" style="height:28px;padding:0 10px">Clear</button></span></div>` +
+    zs.log.map(l => `<div class="it"><span class="pill ${l.ok ? 'ok' : 'bad'}">${l.ok ? 'PASS' : 'FAIL'}</span><div>${esc(l.c || 'Circuit')}<small>${l.t}${l.In} · max ${l.max.toFixed(1)} Ω · ${new Date(l.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</small></div><b class="mono">${fmtO(l.r)} Ω</b></div>`).join('');
+}
+$('#p-zs').addEventListener('click', async e => {
+  const t = e.target.closest('[data-t]'), a = e.target.closest('[data-a]');
+  if (t && t.closest('#zsTypes, #zsGrid')) zs.t = t.dataset.t;
+  if (a && a.closest('#zsAmps, #zsGrid')) zs.In = +a.dataset.a;
+  if ((t && t.closest('#zsTypes, #zsGrid')) || (a && a.closest('#zsAmps, #zsGrid'))) { prefs.set('zsType', zs.t); prefs.set('zsIn', zs.In); updateZs(); if (e.target.closest('#zsGrid')) $('#zsIn').focus(); return; }
+  const id = e.target.closest('button')?.id;
+  if (id === 'zsAdd') {
+    const r = zsReading(); if (r == null) { toast('Type a reading first'); $('#zsIn').focus(); return; }
+    const max = zsMax(zs.t, zs.In);
+    zs.log.unshift({ c: clean($('#zsCct').value), t: zs.t, In: zs.In, r, max, ok: r <= max + 1e-9, at: Date.now() });
+    zs.log = zs.log.slice(0, 100); prefs.set('zsLog', zs.log); drawZsLog();
+    $('#zsCct').value = ''; $('#zsIn').value = ''; prefs.set('zsReading', ''); updateZs(); $('#zsIn').focus();
+    toast('Added to log');
+  } else if (id === 'zsCopy') {
+    const txt = ['Circuit\tMCB\tMeasured Zs (Ω)\tMax Zs (Ω)\tResult\tDate'].concat(zs.log.map(l => `${l.c || 'Circuit'}\t${l.t}${l.In}\t${l.r}\t${l.max.toFixed(1)}\t${l.ok ? 'PASS' : 'FAIL'}\t${new Date(l.at).toLocaleString()}`)).join('\n');
+    try { await navigator.clipboard.writeText(txt); toast('Log copied — paste into a spreadsheet or test sheet'); } catch { toast('Copy isn’t available here'); }
+  } else if (id === 'zsClear') {
+    const b = $('#zsClear'); if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap to confirm'; return; }
+    zs.log = []; prefs.set('zsLog', []); drawZsLog();
+  } else if (id === 'zsOpenTbl') { const t = S.A && resolveRef('table', '8.1'); if (t) go(t); else toast('Open your PDF first'); }
+  else if (id === 'zsOpenCl') { const t = S.A && resolveRef('clause', '8.3.9'); if (t) go(t); else toast('Open your PDF first'); }
+});
 
 /* ================================================================== OPEN / LIBRARY */
 async function showWelcome(msg) {
@@ -1500,6 +1580,7 @@ function renderAllPanels() { renderChanges(); renderContents(); renderCatalogue(
 
 /* ================================================================== BOOT */
 applyTheme();
+renderZs();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 if ('serviceWorker' in navigator && location.protocol === 'https:' || location.hostname === 'localhost') {
   try { navigator.serviceWorker?.register('sw.js').catch(() => {}); } catch {}

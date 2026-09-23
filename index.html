@@ -21,7 +21,8 @@
   --f-label:"Barlow Semi Condensed","Barlow",system-ui,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
   --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
-  --bar-h:56px; --side-w:360px;
+  --ok:#23703A; --ok-soft:rgba(35,112,58,.12); --bad:#B42318; --bad-soft:rgba(180,35,24,.1);
+  --bar-h:56px; --side-w:384px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -29,6 +30,7 @@
     --ground:#111618; --surface:#171E21; --surface-2:#1D2629; --ink:#E3E8E6; --ink-2:#A2AEB2; --ink-3:#77858A;
     --rule:#2A3438; --accent:#E3894A; --accent-ink:#1A1004; --accent-soft:rgba(227,137,74,.15); --accent-line:rgba(227,137,74,.6);
     --earth:#80BD76; --mark:rgba(245,196,40,.42); --desk:#0A0E0F; --shadow:0 1px 2px rgba(0,0,0,.5),0 6px 18px rgba(0,0,0,.35);
+    --ok:#6FCF8A; --ok-soft:rgba(111,207,138,.14); --bad:#FF7B6E; --bad-soft:rgba(255,123,110,.13);
   }
 }
 :root[data-theme="dark"]{
@@ -36,6 +38,7 @@
   --ground:#111618; --surface:#171E21; --surface-2:#1D2629; --ink:#E3E8E6; --ink-2:#A2AEB2; --ink-3:#77858A;
   --rule:#2A3438; --accent:#E3894A; --accent-ink:#1A1004; --accent-soft:rgba(227,137,74,.15); --accent-line:rgba(227,137,74,.6);
   --earth:#80BD76; --mark:rgba(245,196,40,.42); --desk:#0A0E0F; --shadow:0 1px 2px rgba(0,0,0,.5),0 6px 18px rgba(0,0,0,.35);
+  --ok:#6FCF8A; --ok-soft:rgba(111,207,138,.14); --bad:#FF7B6E; --bad-soft:rgba(255,123,110,.13);
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -73,7 +76,7 @@ button{cursor:pointer}
 .main{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);min-height:0}
 .side{background:var(--surface);border-right:1px solid var(--rule);display:flex;flex-direction:column;min-height:0;z-index:20}
 .tabs{display:flex;gap:0;justify-content:space-between;padding:6px 6px 0;border-bottom:1px solid var(--rule);overflow-x:auto;scrollbar-width:none}
-.tab{border:0;background:none;padding:10px 5px 9px;font:600 12.5px/1 var(--f-label);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);border-bottom:2.5px solid transparent;white-space:nowrap}
+.tab{border:0;background:none;padding:10px 4px 9px;font:600 12.5px/1 var(--f-label);letter-spacing:.035em;text-transform:uppercase;color:var(--ink-3);border-bottom:2.5px solid transparent;white-space:nowrap}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 .tab .count{font:500 10.5px var(--f-mono);color:var(--ink-3);margin-left:3px;letter-spacing:0}
 .panels{flex:1;min-height:0;position:relative}
@@ -199,6 +202,69 @@ button{cursor:pointer}
 .notice{min-width:0}
 body.sub-doc #pages{padding-top:72px}
 .ch-intro a,.fine a{color:var(--accent)}
+
+.ch-alert{margin:4px 12px 12px;border:1.5px solid var(--bad);background:var(--bad-soft);border-radius:14px;padding:12px 14px;display:grid;gap:6px}
+.ch-alert-top{display:flex;align-items:center;gap:6px;color:var(--bad);font:700 11.5px var(--f-label);letter-spacing:.08em;text-transform:uppercase}
+.ch-alert-top .icon{width:16px;height:16px}
+.ch-alert h3{margin:0;font:700 16.5px/1.2 var(--f-label);letter-spacing:.005em;text-wrap:balance}
+.ch-alert p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.45}
+.ch-alert ul{margin:0;padding-left:18px;font-size:13.5px;display:grid;gap:3px}
+.ch-alert .fine{font-size:12px}
+.ch-alert .fine a{color:var(--accent)}
+/* Zs checker (Table 8.1) */
+.zs{padding:2px 14px 20px;display:grid;gap:14px}
+.zs-head .eyebrow{font:600 11px var(--f-mono);letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+.zs-head h2{margin:2px 0 2px;font:700 21px/1.1 var(--f-label);letter-spacing:.005em}
+.zs-head p{margin:0;font-size:13px;color:var(--ink-2)}
+.zs-lbl{font:700 11.5px var(--f-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;display:flex;justify-content:space-between}
+.zs-types{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.zs-types button{border:1.5px solid var(--rule);background:var(--surface);border-radius:12px;padding:9px 6px 8px;display:grid;gap:1px;justify-items:center}
+.zs-types b{font:700 20px/1 var(--f-label)}
+.zs-types span{font:500 11px var(--f-mono);color:var(--ink-3)}
+.zs-types button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.zs-types button[aria-pressed="true"] b{color:var(--accent)}
+.zs-amps{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.zs-amps button{border:1px solid var(--rule);background:var(--surface);border-radius:9px;height:38px;font:600 13.5px var(--f-mono);font-variant-numeric:tabular-nums;padding:0}
+.zs-amps button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+.zs-read{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:stretch}
+.zs-inwrap{position:relative}
+.zs-inwrap input{width:100%;height:58px;border-radius:14px;border:1.5px solid var(--rule);background:var(--surface-2);font:600 26px var(--f-mono);font-variant-numeric:tabular-nums;padding:0 44px 0 16px;outline:none}
+.zs-inwrap input:focus{border-color:var(--accent);background:var(--surface)}
+.zs-inwrap .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font:600 20px var(--f-mono);color:var(--ink-3)}
+.zs-max{border-radius:14px;background:var(--surface-2);padding:6px 14px;display:grid;align-content:center;justify-items:end;min-width:96px}
+.zs-max span{font:600 10.5px var(--f-mono);letter-spacing:.06em;color:var(--ink-3);text-transform:uppercase}
+.zs-max b{font:600 24px/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
+.zs-result{border-radius:16px;padding:14px 16px;display:grid;gap:10px;background:var(--surface-2);border:1.5px solid var(--rule);transition:background .15s,border-color .15s}
+.zs-result.ok{background:var(--ok-soft);border-color:var(--ok)}
+.zs-result.bad{background:var(--bad-soft);border-color:var(--bad)}
+.zs-verdict{display:flex;align-items:center;gap:12px}
+.zs-dot{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--rule);color:var(--surface);font:700 20px var(--f-label)}
+.ok .zs-dot{background:var(--ok)} .bad .zs-dot{background:var(--bad)}
+.zs-verdict b{display:block;font:700 19px/1.1 var(--f-label);letter-spacing:.01em}
+.ok .zs-verdict b{color:var(--ok)} .bad .zs-verdict b{color:var(--bad)}
+.zs-verdict span{font-size:13px;color:var(--ink-2)}
+.zs-gauge{position:relative;height:10px;border-radius:5px;background:var(--rule);overflow:visible}
+.zs-gauge i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--ink-3);transition:width .2s}
+.ok .zs-gauge i{background:var(--ok)} .bad .zs-gauge i{background:var(--bad)}
+.zs-gauge em{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);left:80%}
+.zs-gauge-l{position:relative;height:15px;font:500 11px var(--f-mono);color:var(--ink-3);margin-top:4px}
+.zs-gauge-l .mx{position:absolute;left:80%;transform:translateX(-50%);white-space:nowrap}
+.zs-actions{display:flex;gap:8px;flex-wrap:wrap}
+.zs-actions input{flex:1;min-width:120px;height:36px;border-radius:9px;border:1px solid var(--rule);background:var(--surface);padding:0 10px;outline:none}
+.zs-grid{width:100%;border-collapse:separate;border-spacing:0;font:500 13px var(--f-mono);font-variant-numeric:tabular-nums;border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.zs-grid th{font:700 11px var(--f-label);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);padding:7px 6px;text-align:right}
+.zs-grid th:first-child,.zs-grid td:first-child{text-align:left;padding-left:12px}
+.zs-grid td{padding:6px;text-align:right;border-top:1px solid var(--rule);cursor:pointer}
+.zs-grid td:first-child{color:var(--ink-2);cursor:default}
+.zs-grid td:hover:not(:first-child){background:var(--accent-soft)}
+.zs-grid tr.sel td{background:var(--surface-2)}
+.zs-grid td.sel{background:var(--accent)!important;color:var(--accent-ink);font-weight:600;border-radius:6px}
+.zs-log .it{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:7px 0;border-top:1px dashed var(--rule);font-size:13.5px}
+.zs-log .it .pill{font:700 10.5px var(--f-mono);padding:2px 6px;border-radius:5px;color:var(--surface)}
+.zs-log .it .pill.ok{background:var(--ok)} .zs-log .it .pill.bad{background:var(--bad)}
+.zs-log .it small{display:block;color:var(--ink-3);font:500 11.5px var(--f-mono)}
+.zs-note{font-size:12px;color:var(--ink-3);line-height:1.45}
+.zs-note a,.zs-note button{color:var(--accent);background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}
 /* ---------- viewer ---------- */
 .viewer{position:relative;overflow:auto;background:var(--desk);min-height:0;touch-action:pan-x pan-y;overscroll-behavior:contain}
 #pages{padding:14px 12px 80px;width:max-content;min-width:100%;transform-origin:0 0}
@@ -316,6 +382,8 @@ body.sub-doc #pages{padding-top:72px}
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
   <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
   <symbol id="i-delta" viewBox="0 0 24 24"><path d="M12 4 3.5 19h17z"/><path d="M12 10v4M12 16.5v.01"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
   <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 17 5-5 4 4 3-3 6 6"/></symbol>
 </svg>
 
@@ -348,8 +416,8 @@ body.sub-doc #pages{padding-top:72px}
         <button class="tab" role="tab" data-tab="contents">Contents</button>
         <button class="tab" role="tab" data-tab="tables">Tables<span class="count" id="nTables"></span></button>
         <button class="tab" role="tab" data-tab="index">Index</button>
+        <button class="tab" role="tab" data-tab="zs" title="Table 8.1 earth fault-loop check">Zs</button>
         <button class="tab" role="tab" data-tab="changes">Changes</button>
-        <button class="tab" role="tab" data-tab="search">Search</button>
         <button class="tab" role="tab" data-tab="saved">Saved</button>
       </div>
       <div class="progress" id="progress" hidden><span id="progressTxt">Indexing…</span><div class="bar"><i id="progressBar"></i></div></div>
@@ -359,6 +427,7 @@ body.sub-doc #pages{padding-top:72px}
         <section class="panel" id="p-figures" role="tabpanel" hidden></section>
         <section class="panel" id="p-index" role="tabpanel" hidden></section>
         <section class="panel" id="p-changes" role="tabpanel" hidden></section>
+        <section class="panel" id="p-zs" role="tabpanel" hidden></section>
         <section class="panel" id="p-search" role="tabpanel" hidden></section>
         <section class="panel" id="p-saved" role="tabpanel" hidden></section>
       </div>
@@ -374,8 +443,8 @@ body.sub-doc #pages{padding-top:72px}
     <button role="tab" data-tab="contents"><svg class="icon"><use href="#i-list"/></svg>Contents</button>
     <button role="tab" data-tab="tables"><svg class="icon"><use href="#i-table"/></svg>Tables</button>
     <button role="tab" data-tab="index"><svg class="icon"><use href="#i-az"/></svg>Index</button>
+    <button role="tab" data-tab="zs"><svg class="icon"><use href="#i-bolt"/></svg>Zs 8.1</button>
     <button role="tab" data-tab="changes"><svg class="icon"><use href="#i-delta"/></svg>Changes</button>
-    <button role="tab" data-tab="search"><svg class="icon"><use href="#i-search"/></svg>Search</button>
     <button role="tab" data-tab="saved"><svg class="icon"><use href="#i-bm"/></svg>Saved</button>
   </nav>
 </div>
