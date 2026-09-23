@@ -1,7 +1,7 @@
 // Wiring Rules Reader — offline PDF reader with contents, tables, index, search and bookmarks.
 // Everything runs on the device. The PDF is never uploaded.
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=5';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
@@ -724,6 +724,7 @@ function selectTab(tab, { open = true } = {}) {
   $$('#tabs .tab, #bottombar button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
   $$('.panel').forEach(p => p.hidden = p.id !== 'p-' + tab);
   if (isPhone() && open) openDrawer();
+  if (tab === 'zs' && !$('#p-zs').children.length) renderZs();
   if (tab === 'contents') requestAnimationFrame(() => scrollPanelTo($('#p-contents .row.current')));
 }
 $$('#tabs .tab').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
@@ -1582,8 +1583,13 @@ function renderAllPanels() { renderChanges(); renderContents(); renderCatalogue(
 applyTheme();
 renderZs();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
-if ('serviceWorker' in navigator && location.protocol === 'https:' || location.hostname === 'localhost') {
-  try { navigator.serviceWorker?.register('sw.js').catch(() => {}); } catch {}
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  try {
+    // When a new version of the app takes over, reload once so the page and its code always match.
+    const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
+  } catch {}
 }
 (async () => {
   const last = prefs.get('lastDoc', null);
