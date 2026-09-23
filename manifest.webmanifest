@@ -1,0 +1,20 @@
+{
+  "name": "Wiring Rules Reader",
+  "short_name": "Wiring Rules",
+  "description": "Offline reader for your own copy of AS/NZS 3000 with clickable contents, tables, index, search and bookmarks.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#172024",
+  "theme_color": "#172024",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    { "action": "./", "accept": { "application/pdf": [".pdf"] } }
+  ],
+  "categories": ["books", "productivity", "utilities"]
+}
