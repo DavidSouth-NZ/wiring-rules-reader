@@ -1,7 +1,8 @@
 // Wiring Rules Reader — offline PDF reader with contents, tables, index, search and bookmarks.
 // Everything runs on the device. The PDF is never uploaded.
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=5';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=6';
+import { GUIDES } from './guides.js?v=6';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
@@ -725,6 +726,7 @@ function selectTab(tab, { open = true } = {}) {
   $$('.panel').forEach(p => p.hidden = p.id !== 'p-' + tab);
   if (isPhone() && open) openDrawer();
   if (tab === 'zs' && !$('#p-zs').children.length) renderZs();
+  if (tab === 'guides' && !$('#p-guides').children.length) renderGuides();
   if (tab === 'contents') requestAnimationFrame(() => scrollPanelTo($('#p-contents .row.current')));
 }
 $$('#tabs .tab').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
@@ -1448,6 +1450,84 @@ $('#p-zs').addEventListener('click', async e => {
     zs.log = []; prefs.set('zsLog', []); drawZsLog();
   } else if (id === 'zsOpenTbl') { const t = S.A && resolveRef('table', '8.1'); if (t) go(t); else toast('Open your PDF first'); }
   else if (id === 'zsOpenCl') { const t = S.A && resolveRef('clause', '8.3.9'); if (t) go(t); else toast('Open your PDF first'); }
+});
+
+
+/* ================================================================== GUIDES
+   On-site checklists from guides.js. Ticks, readings and the job name are kept on this
+   device per guide, so a half-finished job survives closing the app.                    */
+let gdOpen = prefs.get('gdOpen', null);
+const gdState = id => prefs.get('gd.' + id, { job: '', done: {}, rec: {} });
+const gdSave = (id, st) => prefs.set('gd.' + id, st);
+const gdSteps = g => g.sections.flatMap((sec, si) => sec.steps.map((st, i) => ({ ...st, key: si + '.' + i })));
+function gdPass(rule, v) {
+  if (!rule || v === '' || v == null) return '';
+  const n = parseFloat(String(v).replace(',', '.')); if (!Number.isFinite(n)) return '';
+  const [k, lim] = rule.split(':'); return (k === 'min' ? n >= +lim : n <= +lim) ? 'ok' : 'bad';
+}
+function renderGuides() {
+  const el = $('#p-guides');
+  const g = GUIDES.find(x => x.id === gdOpen);
+  if (!g) {
+    el.innerHTML = `<div class="gd-list"><div class="gd-intro"><h2>Guides</h2><p>Step-by-step checklists for common jobs. Tick steps as you go and record readings. Progress is saved on this device.</p></div>` +
+      GUIDES.map(x => { const st = gdState(x.id), all = gdSteps(x), d = all.filter(s => st.done[s.key]).length;
+        return `<button class="gd-card" data-open="${esc(x.id)}"><div class="gd-meta">${x.tags.map(t => `<span class="tag${t === 'NZ only' ? ' nz' : ''}">${esc(t)}</span>`).join('')}</div><b>${esc(x.title)}</b><p>${esc(x.summary)}</p>${d ? `<div class="gd-prog"><i style="width:${d / all.length * 100}%"></i></div><span class="fine">${d} of ${all.length} steps ticked${st.job ? ' · ' + esc(st.job) : ''}</span>` : `<span class="fine">${all.length} steps · updated ${esc(x.updated)}</span>`}</button>`; }).join('') +
+      `<p class="fine" style="padding:0 4px">More guides can be added over time.</p></div>`;
+    return;
+  }
+  const st = gdState(g.id), all = gdSteps(g);
+  let html = `<div class="gd-view"><div class="gd-top"><div class="row1"><button class="mini" id="gdBack" aria-label="All guides">${icon('back')}</button><h2>${esc(g.title)}</h2><span class="gd-count" id="gdCount"></span></div>
+    <div class="gd-prog"><i id="gdBar"></i></div>
+    <input class="job" id="gdJob" placeholder="Job / address (optional)" value="${esc(st.job || '')}" aria-label="Job name or address"></div><div class="gd-body"><p>${esc(g.intro)}</p>`;
+  g.sections.forEach((sec, si) => {
+    html += `<div class="gd-sec"><h3>${esc(sec.title)}<span data-seccount="${si}"></span></h3>`;
+    sec.steps.forEach((stp, i) => {
+      const key = si + '.' + i, v = st.rec[key] ?? '';
+      html += `<div class="gd-step${st.done[key] ? ' done' : ''}${stp.warn ? ' warn' : ''}" data-key="${key}"><button class="tick" data-tick="${key}" aria-label="Mark step done" aria-pressed="${!!st.done[key]}">${icon('check')}</button><div><div class="txt">${esc(stp.text)}</div>`;
+      const extra = [];
+      if (stp.record) extra.push(`<div class="gd-rec ${gdPass(stp.record.pass, v)}" data-reck="${key}"><label for="gdr-${key}">${esc(stp.record.label)}</label><input id="gdr-${key}" data-rec="${key}" inputmode="decimal" value="${esc(v)}" placeholder="—"><span>${esc(stp.record.unit)}</span></div>`);
+      if (stp.zs) extra.push(`<button class="gd-zs" data-zs="${stp.zs.t}:${stp.zs.In}">${icon('bolt')}Check Zs</button>`);
+      if (stp.refs?.length) extra.push(refChips(stp.refs));
+      if (extra.length) html += `<div class="extra">${extra.join('')}</div>`;
+      html += `</div></div>`;
+    });
+    html += `</div>`;
+  });
+  html += `<div class="btnrow" style="padding:14px 0 0"><button class="btn primary" id="gdCopy">${icon('copy')}Copy results</button><button class="btn" id="gdReset">Start a new job</button></div></div>`;
+  html += `<div class="gd-src">Sources, checked ${esc(g.updated)}:<ul>${g.sources.map(s => `<li>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>` : esc(s.label)}</li>`).join('')}</ul><p>This checklist is a working aid written for this app, not the Standard or WorkSafe wording. Always follow the clauses, the manufacturer’s instructions and your training.</p></div></div>`;
+  el.innerHTML = html;
+  gdProgress(g);
+}
+function gdProgress(g) {
+  const st = gdState(g.id), all = gdSteps(g), d = all.filter(s => st.done[s.key]).length;
+  $('#gdCount').textContent = `${d}/${all.length}`; $('#gdBar').style.width = (d / all.length * 100) + '%';
+  g.sections.forEach((sec, si) => { const n = sec.steps.filter((_, i) => st.done[si + '.' + i]).length; const c = $(`[data-seccount="${si}"]`); if (c) c.textContent = `${n}/${sec.steps.length}`; });
+}
+$('#p-guides').addEventListener('click', async e => {
+  const t = e.target;
+  const open = t.closest('[data-open]'); if (open) { gdOpen = open.dataset.open; prefs.set('gdOpen', gdOpen); renderGuides(); $('#p-guides').scrollTop = 0; return; }
+  if (t.closest('#gdBack')) { gdOpen = null; prefs.set('gdOpen', null); renderGuides(); return; }
+  const g = GUIDES.find(x => x.id === gdOpen); if (!g) return;
+  const tick = t.closest('[data-tick]');
+  if (tick) { const st = gdState(g.id), k = tick.dataset.tick; st.done[k] = !st.done[k]; gdSave(g.id, st); tick.closest('.gd-step').classList.toggle('done', st.done[k]); tick.setAttribute('aria-pressed', st.done[k]); gdProgress(g); return; }
+  const zb = t.closest('[data-zs]'); if (zb) { const [ty, a] = zb.dataset.zs.split(':'); zs.t = ty; zs.In = +a; prefs.set('zsType', zs.t); prefs.set('zsIn', zs.In); if (!$('#p-zs').children.length) renderZs(); updateZs(); selectTab('zs'); toast(`Zs check set to Type ${ty} ${a} A — change it if your MCB is different`); return; }
+  const chip = t.closest('.chip'); if (chip) { const r = refToTarget(chip.dataset.ref); if (r.t) go(r.t); else toast(S.A ? chip.dataset.ref + ' was not found in this PDF' : 'Clause links work once your PDF is open'); return; }
+  if (t.closest('#gdCopy')) {
+    const st = gdState(g.id); const lines = [g.title, st.job ? 'Job: ' + st.job : '', 'Date: ' + new Date().toLocaleDateString(), ''];
+    g.sections.forEach((sec, si) => { lines.push(sec.title.toUpperCase()); sec.steps.forEach((stp, i) => { const k = si + '.' + i; const v = st.rec[k]; lines.push(`[${st.done[k] ? 'x' : ' '}] ${stp.record ? stp.record.label + ': ' + (v ? v + ' ' + stp.record.unit : '—') : stp.text.split('. ')[0].slice(0, 90)}`); }); lines.push(''); });
+    try { await navigator.clipboard.writeText(lines.filter((l, i) => l !== '' || lines[i - 1] !== '').join('\n')); toast('Results copied — paste into your job notes or certificate'); } catch { toast('Copy isn’t available here'); }
+    return;
+  }
+  if (t.closest('#gdReset')) { const b = $('#gdReset'); if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to clear ticks and readings'; return; } gdSave(g.id, { job: '', done: {}, rec: {} }); renderGuides(); toast('Checklist cleared'); }
+});
+$('#p-guides').addEventListener('input', e => {
+  const g = GUIDES.find(x => x.id === gdOpen); if (!g) return;
+  const st = gdState(g.id);
+  if (e.target.id === 'gdJob') { st.job = e.target.value; gdSave(g.id, st); return; }
+  const k = e.target.dataset.rec; if (k == null) return;
+  st.rec[k] = e.target.value; gdSave(g.id, st);
+  const stp = gdSteps(g).find(s => s.key === k); const box = e.target.closest('.gd-rec');
+  box.classList.remove('ok', 'bad'); const r = gdPass(stp.record.pass, e.target.value); if (r) box.classList.add(r);
 });
 
 /* ================================================================== OPEN / LIBRARY */
