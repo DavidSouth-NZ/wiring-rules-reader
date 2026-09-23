@@ -27,6 +27,21 @@ export const REGS_MODS = [
   { refs: ['Clause 1.6.2', 'Clause 2.3.2.1.2'], text: 'Clause 1.6.2(c) note (b) (NZ supply voltage tolerance) is deleted, and items (b) and (c) of 2.3.2.1.2 are deleted. Read these clauses together with the regulations.' }
 ];
 
+// Pinned at the top of the Changes tab: things that catch people out on site.
+export const HIGHLIGHTS = [
+  {
+    head: 'Flush switchboards in internal walls: earthed steel back plate',
+    text: 'In a flush-mounted board in an internal wall, the live parts at the back of the board end up within 50 mm of the surface on the other side of the wall. Clause 3.9.4.2 (changed in 2018) says wiring fixed within 50 mm of a surface must be protected by a method from 3.9.4.4, and Figure 3.3 shows this can apply at the rear of equipment such as switchboards. A plastic back gives no protection against a screw or nail from the other side. The usual answer is an earthed steel back plate: method (b), an earthed metal covering that makes the circuit protection operate if it is pierced. A 30 mA RCD, method (c), can’t protect the incoming side of the board ahead of the RCDs.',
+    bullets: [
+      'Fit the manufacturer’s steel back plate to plastic-backed flush boards in internal walls, and connect it to the earth bar.',
+      'Other allowed methods: WSX3 mechanical protection (a) or 30 mA RCD protection (c) where these actually cover the parts at risk.',
+      'Surface-mounted boards, and boards on an external wall with nothing within 50 mm behind them, may not need it. Check against 3.9.4.2.'
+    ],
+    refs: ['Clause 3.9.4.2', 'Clause 3.9.4.4', 'Figure 3.3'],
+    source: { label: 'Vynco Industries (manufacturer guidance)', url: 'https://www.facebook.com/vyncoindustriesltd/posts/installing-a-domestic-switchboardfollowing-changes-to-asnzs-30002018-wiring-rule/1690384783095614/' }
+  }
+];
+
 export const TOPICS = [
   {
     title: 'RCDs',
@@ -49,6 +64,7 @@ export const TOPICS = [
   {
     title: 'Switchboards',
     items: [
+      { tags: ['new'], head: 'Flush boards: protect the back', text: 'Plastic-backed flush boards in internal walls need an earthed steel back plate (or another 3.9.4.4 method), because the back sits within 50 mm of the far wall surface. See the highlight at the top of this tab.', refs: ['Clause 3.9.4.2', 'Clause 3.9.4.4'] },
       { tags: ['amd'], head: 'Internal arcing faults', text: 'Protection against internal arcing faults in switchboards is stronger, and Amendment 3 revised it again.', refs: ['Clause 2.5.5'] },
       { tags: [], head: 'Access, clearances and switchrooms', text: 'Clearance drawings are updated. Boards of 800 A or more have added rules for access and egress, switchroom door sizes and clearances.', refs: ['Clause 2.10.2'] },
       { tags: ['new'], head: 'Switchboard checklist', text: 'Appendix K is a new summary of switchboard requirements.', refs: ['App K'] },
