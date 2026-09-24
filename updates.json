@@ -1,36 +1,19 @@
 {
-  "about": "Wiring Rules Reader update list. The app reads this file each time it opens online.",
+  "about": "Wiring Rules Reader update list. The app reads this file each time it opens online. Add a new amendment or ruling to 'items' when one is published, and anything else worth telling users to 'notices'. Every entry needs a unique id. Users who tap OK won’t see that id again.",
   "updated": "2026-09-24",
   "standard": "AS/NZS 3000:2018",
   "items": [
-    {
-      "id": "AS3000-2018-A1",
-      "type": "amendment",
-      "num": 1,
-      "title": "Amendment No. 1",
-      "date": "January 2020"
-    },
-    {
-      "id": "AS3000-2018-A2",
-      "type": "amendment",
-      "num": 2,
-      "title": "Amendment No. 2",
-      "date": "April 2021"
-    },
-    {
-      "id": "AS3000-2018-A3",
-      "type": "amendment",
-      "num": 3,
-      "title": "Amendment No. 3",
-      "date": "May 2023"
-    },
-    {
-      "id": "AS3000-2018-R1",
-      "type": "ruling",
-      "num": 1,
-      "title": "Ruling 1",
-      "date": "May 2024"
-    }
+    { "id": "AS3000-2018-A1", "type": "amendment", "num": 1, "title": "Amendment No. 1", "date": "January 2020" },
+    { "id": "AS3000-2018-A2", "type": "amendment", "num": 2, "title": "Amendment No. 2", "date": "April 2021" },
+    { "id": "AS3000-2018-A3", "type": "amendment", "num": 3, "title": "Amendment No. 3", "date": "May 2023" },
+    { "id": "AS3000-2018-R1", "type": "ruling", "num": 1, "title": "Ruling 1", "date": "May 2024" }
   ],
-  "notices": []
+  "notices": [
+    {
+      "id": "next-edition-2027",
+      "title": "A new edition of AS/NZS 3000 is on the way",
+      "text": "The Wiring Rules are being revised. A draft is expected for public comment in the second half of 2026, and the new edition is due around mid-2027. The 2018 edition stays the one cited in NZ until the regulations change.",
+      "url": "https://ecawa.org.au/news-insights/timeline-of-the-asnzs-3000-wiring-rules-and-what-s-coming-next"
+    }
+  ]
 }

@@ -2,13 +2,13 @@
 // Everything runs on the device. The PDF is never uploaded.
 import './vendor/polyfills.js';
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=12';
-import { GUIDES } from './guides.js?v=12';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=13';
+import { GUIDES } from './guides.js?v=13';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.shim.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
 const ANALYSIS_VERSION = 10;
-const APP_VERSION = '12 (24 Sep 2026)';
+const APP_VERSION = '13 (24 Sep 2026)';
 const UA = navigator.userAgent || '';
 const IOS = /iP(hone|ad|od)/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SAFARI = IOS || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg\//.test(UA));
@@ -1814,7 +1814,7 @@ $('#p-guides').addEventListener('input', e => {
 /* ================================================================== UPDATE ALERTS
    Reads updates.json from the app's own site (no other website is contacted). Shows a
    closable bar at the bottom for any published amendment or ruling your copy doesn't
-   include, and for notices. "Got it" hides that item for good; ✕ hides it until next time. */
+   include, and for notices. "OK" hides that item for good (a new amendment has a new id, so it still shows); ✕ hides it until next time. */
 let UPD = null;
 const updHidden = new Set();   // closed with ✕: hidden only until the app is next opened or refreshed
 const ackedIds = () => prefs.get('ackUpdates', []);
@@ -1855,7 +1855,7 @@ function showUpdateBar() {
   const it = list[0], ht = haveText();
   const title = it.kind === 'item' ? `New for ${UPD.standard || 'the Standard'}: ${it.title}${it.date ? ' (' + it.date + ')' : ''}` : it.title;
   const text = it.kind === 'item' ? `Your copy includes ${ht || 'earlier amendments'}. Get the new document from Standards NZ, then add its PDF under Changes → Add amendment PDF.${it.text ? ' ' + it.text : ''}` : it.text;
-  bar.innerHTML = `<div class="ub-ic">${icon('delta')}</div><div class="ub-body"><b>${esc(title)}</b><span>${esc(text)}</span><div class="ub-act">${it.url ? `<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Details</a>` : ''}<button class="btn primary" data-ack="${esc(it.id)}">Got it</button>${list.length > 1 ? `<span class="fine">1 of ${list.length}</span>` : ''}</div></div><button class="mini" data-hide="${esc(it.id)}" aria-label="Close for now">${icon('x')}</button>`;
+  bar.innerHTML = `<div class="ub-ic">${icon('delta')}</div><div class="ub-body"><b>${esc(title)}</b><span>${esc(text)}</span><div class="ub-act">${it.url ? `<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Details</a>` : ''}<button class="btn primary" data-ack="${esc(it.id)}">OK</button>${list.length > 1 ? `<span class="fine">1 of ${list.length}</span>` : ''}</div></div><button class="mini" data-hide="${esc(it.id)}" aria-label="Close for now">${icon('x')}</button>`;
   bar.hidden = false;
 }
 $('#updBar').addEventListener('click', e => {

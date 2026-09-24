@@ -1,6 +1,6 @@
 // Offline support for the app files. Your PDF is stored separately in the browser's IndexedDB, not here.
 // Network first: when online you always get the latest version from the site; the cache is only used offline.
-const CACHE = 'wrr-v12';
+const CACHE = 'wrr-v13';
 const SHELL = ['./', 'index.html', 'app.js', 'changes.js', 'guides.js', 'updates.json', 'manifest.webmanifest', 'vendor/polyfills.js', 'vendor/pdf.min.js', 'vendor/pdf.worker.shim.js', 'vendor/pdf.worker.min.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/favicon-64.png',
   ...['FoxitDingbats.pfb','FoxitFixed.pfb','FoxitFixedBold.pfb','FoxitFixedBoldItalic.pfb','FoxitFixedItalic.pfb','FoxitSerif.pfb','FoxitSerifBold.pfb','FoxitSerifBoldItalic.pfb','FoxitSerifItalic.pfb','FoxitSymbol.pfb','LiberationSans-Bold.ttf','LiberationSans-BoldItalic.ttf','LiberationSans-Italic.ttf','LiberationSans-Regular.ttf'].map(f => 'vendor/standard_fonts/' + f)];

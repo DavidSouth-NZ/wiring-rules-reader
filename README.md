@@ -42,7 +42,7 @@ Tap **Choose PDF** and select your AS/NZS 3000 PDF. The first open reads every p
 
 ## Amendment alerts (updates.json)
 
-Each time the app opens online, it reads `updates.json` from your site. It compares the listed amendments and rulings with what your PDF includes (read from the cover, e.g. "Incorporating Amendment No. 1, 2, 3, and Ruling 1") and with any amendment PDFs you've added. For anything newer, it shows a pop-up at the bottom of the screen. **Got it** stops that alert for good on that device. **✕** hides it until the app is next opened. **Changes → Amendment check** shows the status and has **Check now** and **Show dismissed alerts** buttons.
+Each time the app opens online, it reads `updates.json` from your site. It compares the listed amendments and rulings with what your PDF includes (read from the cover, e.g. "Incorporating Amendment No. 1, 2, 3, and Ruling 1") and with any amendment PDFs you've added. For anything newer, it shows a pop-up at the bottom of the screen. **OK** stops that alert for good on that device (it only comes back if a new amendment is added). **✕** hides it until the app is next opened. **Changes → Amendment check** shows the status and has **Check now** and **Show dismissed alerts** buttons.
 
 The standards websites block automatic checks, so `updates.json` is updated by hand. When a new amendment or ruling is published:
 1. On GitHub, open `updates.json` and click the pencil icon (Edit).
