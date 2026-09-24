@@ -2,8 +2,8 @@
 // Everything runs on the device. The PDF is never uploaded.
 import './vendor/polyfills.js';
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=8';
-import { GUIDES } from './guides.js?v=8';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=9';
+import { GUIDES } from './guides.js?v=9';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.shim.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
@@ -1558,7 +1558,7 @@ function renderGuides() {
       const key = si + '.' + i, v = st.rec[key] ?? '';
       html += `<div class="gd-step${st.done[key] ? ' done' : ''}${stp.warn ? ' warn' : ''}" data-key="${key}"><button class="tick" data-tick="${key}" aria-label="Mark step done" aria-pressed="${!!st.done[key]}">${icon('check')}</button><div><div class="txt">${esc(stp.text)}</div>`;
       const extra = [];
-      if (stp.record) extra.push(`<div class="gd-rec ${gdPass(stp.record.pass, v)}" data-reck="${key}"><label for="gdr-${key}">${esc(stp.record.label)}</label><input id="gdr-${key}" data-rec="${key}" inputmode="decimal" value="${esc(v)}" placeholder="—"><span>${esc(stp.record.unit)}</span></div>`);
+      if (stp.record) extra.push(`<div class="gd-rec ${gdPass(stp.record.pass, v)}" data-reck="${key}"><label for="gdr-${key}">${esc(stp.record.label)}</label><input id="gdr-${key}" data-rec="${key}" inputmode="${stp.record.text ? 'text' : 'decimal'}"${stp.record.text ? ' class="wide"' : ''} value="${esc(v)}" placeholder="—">${stp.record.unit ? `<span>${esc(stp.record.unit)}</span>` : ''}</div>`);
       if (stp.zs) extra.push(`<button class="gd-zs" data-zs="${stp.zs.t}:${stp.zs.In}">${icon('bolt')}Check Zs</button>`);
       if (stp.refs?.length) extra.push(refChips(stp.refs));
       if (extra.length) html += `<div class="extra">${extra.join('')}</div>`;

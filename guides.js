@@ -1,7 +1,7 @@
 // Guides: step-by-step on-site checklists. To add a guide, add an object to GUIDES.
 // Each guide has sections, and each section has steps. A step can have:
 //   refs   – clause/table references that open in the Standard (e.g. 'Clause 8.3.9', 'Table 8.1', 'App P')
-//   record – { label, unit, pass?: 'min:1' | 'max:1.0' } adds a box to write down a reading
+//   record – { label, unit, pass?: 'min:1' | 'max:1.0', text?: true } adds a box to write down a reading (text: true for words, e.g. a lock number)
 //   zs     – { t: 'C', In: 32 } adds a button that opens the Zs check with that MCB selected
 //   warn   – true shows the step in red as a critical point
 // These guides are written for this app as working checklists. They are not the Standard's wording:
@@ -82,6 +82,72 @@ export const GUIDES = [
       { label: 'WorkSafe: Addendum to EV charging safety guidelines (January 2026)', url: 'https://www.worksafe.govt.nz/dmsdocument/72327-addendum-to-electric-vehicle-charging-safety-guidelines-3rd-edition/latest/' },
       { label: 'EWRB: Electric vehicle charging installations (December 2025)', url: 'https://www.ewrb.govt.nz/about-us/news-and-notices/electric-vehicle-charging-installations/' },
       { label: 'Electricity (Safety) Amendment Regulations 2025', url: 'https://www.legislation.govt.nz/regulation/public/2025/0225/latest/whole.html' }
+    ]
+  },
+  {
+    id: 'loto-isolation',
+    title: 'Lock out, tag out: isolating electrical equipment (NZ)',
+    summary: 'Isolate, lock, tag and prove dead before working on low-voltage installations or equipment, then restore safely. Follows AS/NZS 4836 (made compulsory by the Electricity (Safety) Regulations) and WorkSafe lockout guidance.',
+    tags: ['Safety', 'Isolation', 'NZ'],
+    updated: 'September 2026',
+    intro: 'Work de-energised. Live work is only allowed where de-energising would create a greater risk, or for testing and fault-finding, and then only with a documented live-work procedure and the right PPE. Regulation 100 of the Electricity (Safety) Regulations 2010 requires electrical work to be done safely in line with AS/NZS 4836. Your employer’s isolation procedure and permit system (if any) come first. This checklist is a reminder, not a replacement.',
+    sections: [
+      {
+        title: 'Plan the job',
+        steps: [
+          { text: 'Talk through the job and do a risk assessment. Record the safe work method, and tell the site contact and anyone affected what will be switched off and for how long.' },
+          { text: 'Identify every source of supply to the equipment: mains, submains, other boards, generators, UPS, solar PV and batteries, EV chargers (including vehicle-to-home), capacitors, and control or interlock circuits fed from elsewhere.', warn: true },
+          { text: 'Check for shared or borrowed neutrals, circuits fed from two boards, and old or unlabelled wiring. Don’t trust labels on the board alone.', warn: true },
+          { text: 'Have your gear ready: personal padlocks and hasps, circuit-breaker lockout devices, danger tags, a voltage tester (CAT-rated for the location) and a proving unit. Check the tester and its leads for damage.' },
+          { text: 'Know where the emergency isolation point is, and make sure a second person is available where the risk calls for one.' }
+        ]
+      },
+      {
+        title: 'Isolate and lock',
+        steps: [
+          { text: 'Switch off the load (stop the machine or equipment) before operating the isolator, so you don’t break load current on a device not rated for it.' },
+          { text: 'Open the isolating switch or circuit-breaker for every source identified. Where fuses are the isolation point, remove and keep them.', refs: ['Clause 2.3.2'] },
+          { text: 'Lock each isolation point with your own personal padlock. Everyone working on the equipment fits their own lock (use a multi-lock hasp). Never share a lock or key.', warn: true, record: { label: 'Lock no.', unit: '', text: true } },
+          { text: 'Fit a danger tag at each isolation point showing your name, the date and time, the reason, and how to contact you.', record: { label: 'Isolation point(s)', unit: '', text: true } },
+          { text: 'Isolate other energy too: release or restrain stored mechanical energy, discharge capacitors, shut off solar PV and battery or generator outputs, and follow their shutdown procedures.' }
+        ]
+      },
+      {
+        title: 'Prove dead (test before you touch)',
+        steps: [
+          { text: 'Prove your voltage tester works on a known live source or proving unit before testing.', warn: true },
+          { text: 'Test every conductor at the point of work: active to neutral, active to earth, neutral to earth, and between all phases on three-phase. Test each circuit and each supply you isolated.', warn: true },
+          { text: 'Prove the tester works again on the known source after testing (prove, test, prove). If the tester fails at any point, treat the circuit as live.', warn: true },
+          { text: 'Try to start or operate the equipment (start buttons, local controls) to confirm it doesn’t run. Return the controls to off afterwards.' },
+          { text: 'Where there’s a risk of induced voltage or back-feed, fit earthing or short-circuiting leads, and cover or barrier any nearby parts that are still live.' }
+        ]
+      },
+      {
+        title: 'While working',
+        steps: [
+          { text: 'Keep the locks and tags on for the whole job, including breaks. If you leave the site, leave the work isolated, locked and tagged, never just switched off.', warn: true },
+          { text: 'Shift or person changeover: the incoming worker fits their lock before the outgoing worker removes theirs, so the isolation is never left without a lock.' },
+          { text: 'If the work changes (another circuit, another board), stop and repeat isolation and proving dead for the new area.' }
+        ]
+      },
+      {
+        title: 'Restore supply',
+        steps: [
+          { text: 'Finish the work and test it as required (for example insulation resistance, polarity and earth continuity), before re-energising.', refs: ['Clause 8.3'] },
+          { text: 'Remove tools, test gear, temporary earths and short-circuiting leads. Refit covers, barriers and escutcheons.' },
+          { text: 'Check everyone is clear and knows you’re about to re-energise.' },
+          { text: 'Each person removes only their own lock and tag. A lock left by someone who can’t be found is removed only through your organisation’s authorised procedure, after checking they’re not at risk.', warn: true },
+          { text: 'Re-energise, then do the live tests (polarity, earth fault-loop impedance, RCD operation) and check the equipment works properly.', refs: ['Clause 8.3.9', 'Clause 8.3.10'], zs: { t: 'C', In: 20 } },
+          { text: 'Tell the site contact the job is finished and supply is restored. Record the isolation, and your certification if the work needs it.' }
+        ]
+      }
+    ],
+    sources: [
+      { label: 'AS/NZS 4836: Safe working on or near low-voltage electrical installations and equipment (free to licensed workers through EWRB with RealMe)' },
+      { label: 'EWRB: How to work safely around electricity', url: 'https://www.ewrb.govt.nz/resources-2/toolbox/how-to-work-safely-around-electricity/' },
+      { label: 'WorkSafe: Keeping workers safe with machine lockouts', url: 'https://www.worksafe.govt.nz/topic-and-industry/machinery/keeping-workers-safe-with-machine-lockouts/' },
+      { label: 'Electricity (Safety) Regulations 2010 (regulation 100)', url: 'https://www.legislation.govt.nz/regulation/public/2010/0036/latest/DLM2763749.html' },
+      { label: 'AS/NZS 3000:2018 Section 8, verification (your PDF)' }
     ]
   }
 ];

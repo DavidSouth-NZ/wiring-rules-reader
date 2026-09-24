@@ -245,6 +245,8 @@ body.sub-doc #pages{padding-top:72px}
 .gd-step .extra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
 .gd-rec{display:flex;align-items:center;gap:6px;border:1px solid var(--rule);border-radius:9px;padding:3px 4px 3px 9px;background:var(--surface-2)}
 .gd-rec label{font-size:12px;color:var(--ink-3)}
+.gd-rec:has(input.wide){flex:1 1 100%}
+.gd-rec input.wide{flex:1;min-width:0;width:auto;text-align:left;font:500 14px var(--f-ui)}
 .gd-rec input{width:78px;height:28px;border:0;background:transparent;font:600 14px var(--f-mono);outline:none;text-align:right}
 .gd-rec span{font:600 12.5px var(--f-mono);color:var(--ink-3);padding-right:4px}
 .gd-rec.ok{border-color:var(--ok);background:var(--ok-soft)} .gd-rec.bad{border-color:var(--bad);background:var(--bad-soft)}
@@ -542,6 +544,6 @@ body.sub-doc #pages{padding-top:72px}
 </section>
 
 <div class="toast" id="toast" hidden role="status"></div>
-<script type="module" src="app.js?v=8"></script>
+<script type="module" src="app.js?v=9"></script>
 </body>
 </html>
