@@ -1,0 +1,36 @@
+{
+  "about": "Wiring Rules Reader update list. The app reads this file each time it opens online.",
+  "updated": "2026-09-24",
+  "standard": "AS/NZS 3000:2018",
+  "items": [
+    {
+      "id": "AS3000-2018-A1",
+      "type": "amendment",
+      "num": 1,
+      "title": "Amendment No. 1",
+      "date": "January 2020"
+    },
+    {
+      "id": "AS3000-2018-A2",
+      "type": "amendment",
+      "num": 2,
+      "title": "Amendment No. 2",
+      "date": "April 2021"
+    },
+    {
+      "id": "AS3000-2018-A3",
+      "type": "amendment",
+      "num": 3,
+      "title": "Amendment No. 3",
+      "date": "May 2023"
+    },
+    {
+      "id": "AS3000-2018-R1",
+      "type": "ruling",
+      "num": 1,
+      "title": "Ruling 1",
+      "date": "May 2024"
+    }
+  ],
+  "notices": []
+}
