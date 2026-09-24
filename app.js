@@ -1,12 +1,18 @@
 // Wiring Rules Reader — offline PDF reader with contents, tables, index, search and bookmarks.
 // Everything runs on the device. The PDF is never uploaded.
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=6';
-import { GUIDES } from './guides.js?v=6';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=7';
+import { GUIDES } from './guides.js?v=7';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
-const ANALYSIS_VERSION = 9;
+const ANALYSIS_VERSION = 10;
+const UA = navigator.userAgent || '';
+const IOS = /iP(hone|ad|od)/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const SAFARI = IOS || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg\//.test(UA));
+const LOWMEM = IOS || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+// Safari: don't let the PDF engine rely on OffscreenCanvas / ImageDecoder inside its worker
+const pdfOpts = data => ({ data, standardFontDataUrl: STD_FONTS, isEvalSupported: false, ...(SAFARI ? { isOffscreenCanvasSupported: false, isImageDecoderSupported: false } : {}), ...(LOWMEM ? { maxImageSize: 16777216 } : {}) });
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -78,12 +84,14 @@ const REF = String.raw`(?:(?:App(?:endix)?\.?|Tables?|Figures?|Figs?\.?|Sections
 const REF_TAIL = new RegExp(String.raw`^\s*${REF}(?:\s*(?:,|and|to|&)\s*${REF})*\s*,?\s*$`);
 const REF_ONE = new RegExp(REF, 'g');
 
-async function analyse(pdf, onProgress) {
+async function analyse(pdf, onProgress, ckKey) {
+  // Memory-light: boilerplate (repeated headers/watermarks) is learnt from a sample of pages first,
+  // then each page is turned straight into lines and its raw text is dropped. Progress is
+  // checkpointed so a phone that runs out of memory can carry on where it stopped.
   const n = pdf.numPages;
-  const raw = [], freq = new Map();
   let labelsFromPdf = null;
   try { labelsFromPdf = await pdf.getPageLabels(); } catch {}
-  for (let i = 0; i < n; i++) {
+  const pageItems = async i => {
     const page = await pdf.getPage(i + 1);
     const vp = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
@@ -96,48 +104,40 @@ async function analyse(pdf, onProgress) {
       const [x2] = vp.convertToViewportPoint(t[4] + (it.width || 0), t[5]);
       items.push([it.str, x, y, Math.max(x2, x + 1), fh]);
     }
-    const seen = new Set();
-    for (const it of items) { const k = boilKey(it[0]); if (k.length >= 8 && !seen.has(k)) { seen.add(k); freq.set(k, (freq.get(k) || 0) + 1); } }
-    raw.push({ w: vp.width, h: vp.height, items });
     page.cleanup();
-    if (i % 4 === 0) onProgress(i / n);
-  }
-  onProgress(1);
-  const boilCut = Math.max(5, Math.ceil(n * 0.22));
-  const isBoil = s => { const k = boilKey(s); return k.length >= 8 && (freq.get(k) || 0) >= boilCut; };
-
-  // printed page labels from header/footer zones (before boilerplate is removed)
-  let labels = new Array(n).fill('');
-  if (n < 12) labels = labels.map((_, i) => String(i + 1));
-  else if (labelsFromPdf && labelsFromPdf.some((l, i) => l && l !== String(i + 1))) labels = labelsFromPdf.map(l => l || '');
+    return { w: vp.width, h: vp.height, items };
+  };
+  let ck = ckKey ? await db.get('analysis', ckKey) : null;
+  if (!ck || ck.v !== ANALYSIS_VERSION || ck.n !== n) ck = null;
+  let boil;
+  if (ck) boil = new Set(ck.boil);
   else {
-    for (let i = 0; i < n; i++) {
-      const { h, items } = raw[i];
-      let best = '';
-      for (const it of items) {
-        const zone = it[2] < h * 0.09 || it[2] > h * 0.92;
-        if (!zone) continue;
-        const m = it[0].trim().split(/\s+/).find(tok => /^\d{1,4}$/.test(tok));
-        if (m) { best = m; if (it[2] < h * 0.09) break; }
-      }
-      labels[i] = best;
+    // pass 1: learn boilerplate from up to 60 evenly spread pages
+    const sample = n <= 60 ? [...Array(n).keys()] : [...Array(60).keys()].map(k => Math.floor(k * (n - 1) / 59));
+    const freq = new Map();
+    for (let k = 0; k < sample.length; k++) {
+      const { items } = await pageItems(sample[k]);
+      const seen = new Set();
+      for (const it of items) { const key = boilKey(it[0]); if (key.length >= 8 && !seen.has(key)) { seen.add(key); freq.set(key, (freq.get(key) || 0) + 1); } }
+      if (k % 4 === 0) onProgress(0.1 * k / sample.length);
     }
-    // fill gaps / fix odd ones using the dominant offset
-    const cnt = new Map();
-    labels.forEach((l, i) => { if (l) { const o = +l - i; cnt.set(o, (cnt.get(o) || 0) + 1); } });
-    const found = labels.filter(Boolean).length;
-    if (found > n * 0.3) {
-      const off = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0][0];
-      for (let i = 0; i < n; i++) {
-        const pred = i + off;
-        if (!labels[i]) { if (pred > 0 && localAgrees(labels, i, off)) labels[i] = String(pred); }
-        else if (+labels[i] !== pred && localAgrees(labels, i, off, true)) labels[i] = String(pred);
-      }
-    } else labels = labels.map((_, i) => String(i + 1));
+    const cut = Math.max(n <= 60 ? 5 : 3, Math.ceil(sample.length * 0.22));
+    boil = new Set([...freq].filter(([, c]) => c >= cut).map(([k]) => k));
   }
-
-  // lines per page (content-stream order; new line on baseline change or jump left)
-  const lines = raw.map(({ items }) => {
+  const isBoil = s => { const k = boilKey(s); return k.length >= 8 && boil.has(k); };
+  const lines = ck ? ck.lines : [], sizes = ck ? ck.sizes : [], labelCand = ck ? ck.labelCand : [];
+  // pass 2: every page straight to lines
+  for (let i = ck ? ck.next : 0; i < n; i++) {
+    const { w, h, items } = await pageItems(i);
+    sizes[i] = [Math.round(w * 100) / 100, Math.round(h * 100) / 100];
+    let best = '';
+    for (const it of items) {
+      const zone = it[2] < h * 0.09 || it[2] > h * 0.92;
+      if (!zone) continue;
+      const m = it[0].trim().split(/\s+/).find(tok => /^\d{1,4}$/.test(tok));
+      if (m) { best = m; if (it[2] < h * 0.09) break; }
+    }
+    labelCand[i] = best;
     const out = [];
     let cur = null;
     for (const [s, x, y, x2, fh] of items) {
@@ -152,9 +152,34 @@ async function analyse(pdf, onProgress) {
       }
     }
     if (cur) out.push(cur);
-    return out.map(l => ({ t: clean(l.t), x: Math.round(l.x * 10) / 10, y: Math.round((l.y - l.fh * 0.95) * 10) / 10, x2: Math.round(l.x2), h: Math.round(l.fh * 1.25 * 10) / 10 })).filter(l => l.t);
-  });
-  const sizes = raw.map(r => [Math.round(r.w * 100) / 100, Math.round(r.h * 100) / 100]);
+    lines[i] = out.map(l => ({ t: clean(l.t), x: Math.round(l.x * 10) / 10, y: Math.round((l.y - l.fh * 0.95) * 10) / 10, x2: Math.round(l.x2), h: Math.round(l.fh * 1.25 * 10) / 10 })).filter(l => l.t);
+    if (i % 4 === 0) onProgress(0.1 + 0.9 * i / n);
+    if (ckKey && i % 50 === 49 && i < n - 1) {
+      await db.put('analysis', ckKey, { v: ANALYSIS_VERSION, n, boil: [...boil], lines, sizes, labelCand, next: i + 1 });
+      if (LOWMEM) { try { await pdf.cleanup(); } catch {} await sleep(30); }
+    }
+  }
+  onProgress(1);
+
+  // printed page labels from header/footer zones
+  let labels = new Array(n).fill('');
+  if (n < 12) labels = labels.map((_, i) => String(i + 1));
+  else if (labelsFromPdf && labelsFromPdf.some((l, i) => l && l !== String(i + 1))) labels = labelsFromPdf.map(l => l || '');
+  else {
+    labels = labelCand.slice();
+    // fill gaps / fix odd ones using the dominant offset
+    const cnt = new Map();
+    labels.forEach((l, i) => { if (l) { const o = +l - i; cnt.set(o, (cnt.get(o) || 0) + 1); } });
+    const found = labels.filter(Boolean).length;
+    if (found > n * 0.3) {
+      const off = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      for (let i = 0; i < n; i++) {
+        const pred = i + off;
+        if (!labels[i]) { if (pred > 0 && localAgrees(labels, i, off)) labels[i] = String(pred); }
+        else if (+labels[i] !== pred && localAgrees(labels, i, off, true)) labels[i] = String(pred);
+      }
+    } else labels = labels.map((_, i) => String(i + 1));
+  }
 
   // ---------- printed contents & lists (front matter)
   const tocPages = new Set(), toc = [], tableList = [], figList = [], tocRows = [];
@@ -248,7 +273,7 @@ async function analyse(pdf, onProgress) {
     let head = null, last = null;
     for (const p of [...indexPages].sort((a, b) => a - b)) {
       const L = lines[p].filter(l => !/^INDEX$/i.test(l.t) && !/^COPYRIGHT$/i.test(l.t) && !/^AS\/NZS/.test(l.t) && !/^\d{1,4}\s+AS\/NZS/.test(l.t) && !/^NOTES?$/i.test(l.t));
-      const cols = splitColumns(L, raw[p].w);
+      const cols = splitColumns(L, sizes[p][0]);
       for (const col of cols) {
         const xs = [...new Set(col.map(l => Math.round(l.x)))].sort((a, b) => a - b);
         const base = xs[0] ?? 0;
@@ -414,6 +439,7 @@ function contextAt(p, y = 1e9) {
 /* ================================================================== VIEWER */
 function buildPages() {
   renderGen++; renderBusy = false; visible.clear();
+  pagesEl.querySelectorAll('canvas').forEach(freeCanvas);
   pagesEl.innerHTML = '';
   pageEls = S.sizes.map((_, i) => {
     const d = document.createElement('div');
@@ -484,45 +510,53 @@ async function renderLoop() {
       await renderPage(todo[0]);
     }
     // free far-away canvases
-    if (S.rendered.size > 14) for (const i of [...S.rendered]) if (Math.abs(i - S.current) > 7 && !visible.has(i)) unrender(i);
+    const keep = LOWMEM ? 5 : 14, far = LOWMEM ? 2 : 7;
+    if (S.rendered.size > keep) for (const i of [...S.rendered]) if (Math.abs(i - S.current) > far && !visible.has(i)) unrender(i);
   } finally { if (gen === renderGen) renderBusy = false; }
 }
+function freeCanvas(c) { if (c) { c.width = 0; c.height = 0; } } // iOS only releases canvas memory this way
 function unrender(i) {
   const d = pageEls[i]; d._tok++; d._scale = 0; delete d.dataset.stale;
+  freeCanvas(d.querySelector('canvas'));
   d.innerHTML = `<span class="ph">${i + 1}</span>`; S.rendered.delete(i);
 }
 async function getText(i) {
   if (S.textCache.has(i)) return S.textCache.get(i);
   const page = await S.pdf.getPage(i + 1);
   const tc = await page.getTextContent();
-  S.textCache.set(i, tc); if (S.textCache.size > 30) S.textCache.delete(S.textCache.keys().next().value);
+  S.textCache.set(i, tc); if (S.textCache.size > (LOWMEM ? 6 : 30)) S.textCache.delete(S.textCache.keys().next().value);
   return tc;
 }
 async function renderPage(i) {
   const d = pageEls[i]; const tok = ++d._tok; const scale = S.scale;
+  let cv = null;
   try {
     const page = await S.pdf.getPage(i + 1);
     if (tok !== d._tok) return;
     const vp = page.getViewport({ scale });
-    let ds = Math.min(window.devicePixelRatio || 1, 2.5);
-    const px = vp.width * vp.height * ds * ds; if (px > 14e6) ds *= Math.sqrt(14e6 / px);
+    let ds = Math.min(window.devicePixelRatio || 1, LOWMEM ? 2 : 2.5);
+    const maxPx = LOWMEM ? 4.5e6 : 14e6;
+    const px = vp.width * vp.height * ds * ds; if (px > maxPx) ds *= Math.sqrt(maxPx / px);
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(vp.width * ds); canvas.height = Math.floor(vp.height * ds);
     const ctx = canvas.getContext('2d', { alpha: false });
+    cv = canvas;
     await page.render({ canvasContext: ctx, viewport: vp, transform: ds !== 1 ? [ds, 0, 0, ds, 0, 0] : null }).promise;
-    if (tok !== d._tok) return;
+    if (tok !== d._tok) { freeCanvas(canvas); return; }
     const tl = document.createElement('div'); tl.className = 'textLayer';
     const tc = await getText(i);
-    if (tok !== d._tok) return;
+    if (tok !== d._tok) { freeCanvas(canvas); return; }
     const layer = new pdfjsLib.TextLayer({ textContentSource: tc, container: tl, viewport: vp });
     await layer.render();
-    if (tok !== d._tok) return;
+    if (tok !== d._tok) { freeCanvas(canvas); return; }
     const ov = document.createElement('div'); ov.className = 'overlay';
+    freeCanvas(d.querySelector('canvas'));
     d.replaceChildren(canvas, tl, ov);
     d._scale = scale; delete d.dataset.stale; S.rendered.add(i);
     decorateText(i);
     buildOverlay(i, page, ov).catch(() => {});
   } catch (e) {
+    if (cv && !cv.isConnected) freeCanvas(cv);
     if (e?.name !== 'RenderingCancelledException') console.warn('render', i, e);
   }
 }
@@ -1247,7 +1281,7 @@ async function addAmendment(file) {
   const box = $('#amdStatus'); const say = t => { if (box) box.textContent = t; };
   say('Reading ' + file.name + '…');
   let pdf;
-  try { pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), standardFontDataUrl: STD_FONTS, isEvalSupported: false }).promise; }
+  try { pdf = await pdfjsLib.getDocument(pdfOpts(new Uint8Array(await file.arrayBuffer()))).promise; }
   catch { say(''); toast('That file could not be opened as a PDF'); return; }
   const aid = pdf.fingerprints[0] + ':' + pdf.numPages;
   if (aid === pid) { say(''); pdf.destroy(); toast('That is the Standard itself, not an amendment'); return; }
@@ -1569,9 +1603,9 @@ async function openBlob(blob, name, isNew, opts = {}) {
   let pdf;
   try {
     const data = new Uint8Array(await blob.arrayBuffer());
-    pdf = await pdfjsLib.getDocument({ data, standardFontDataUrl: STD_FONTS, isEvalSupported: false }).promise;
+    pdf = await pdfjsLib.getDocument(pdfOpts(data)).promise;
   } catch (e) {
-    const msg = e?.name === 'PasswordException' ? 'This PDF is password-protected. Open it once in another PDF app and save an unprotected copy, then try again.' : 'This file could not be opened as a PDF.';
+    const msg = e?.name === 'PasswordException' ? 'This PDF is password-protected. Open it once in another PDF app and save an unprotected copy, then try again.' : `This file could not be opened as a PDF (${esc(e?.message || e)}).`;
     if ($('#welcome').hidden) showWelcome(`<span class="err">${msg}</span>`); else $('#openMsg').innerHTML = `<span class="err">${msg}</span>`;
     return;
   }
@@ -1608,13 +1642,15 @@ async function startAnalysis() {
   const pr = $('#progress'); pr.hidden = false;
   const id = S.id; const t0 = performance.now();
   try {
-    const A = await analyse(S.pdf, f => { if (S.id !== id) throw new Error('switched'); $('#progressBar').style.width = (f * 100) + '%'; $('#progressTxt').textContent = f < 1 ? `Building contents, tables and index… ${Math.round(f * S.pdf.numPages)} / ${S.pdf.numPages} pages` : 'Finishing…'; });
+    prefs.set('analysing', id);
+    const A = await analyse(S.pdf, f => { if (S.id !== id) throw new Error('switched'); $('#progressBar').style.width = (f * 100) + '%'; $('#progressTxt').textContent = f < 0.1 ? 'Getting ready…' : f < 1 ? `Building contents, tables and index… ${Math.round((f - 0.1) / 0.9 * S.pdf.numPages)} / ${S.pdf.numPages} pages` : 'Finishing…'; }, id + ':partial');
     if (S.id !== id) return;
     console.info('analysis', Math.round(performance.now() - t0) + 'ms');
     await db.put('analysis', id, A);
+    db.del('analysis', id + ':partial'); prefs.set('analysing', null);
     useAnalysis(A);
     toast(`Ready: ${A.toc.length} contents entries, ${Object.keys(A.tables).length || A.tableList.length} tables, ${A.index.filter(e => !e.letter).length} index terms`, 3500);
-  } catch (e) { if (e.message !== 'switched') { console.error(e); $('#progressTxt').textContent = 'Indexing failed: ' + e.message; } return; }
+  } catch (e) { if (e.message !== 'switched') { console.error(e); prefs.set('analysing', null); $('#progressTxt').textContent = 'Indexing stopped: ' + (e?.message || e) + '. Use ⋮ → Rebuild contents & index to try again.'; } return; }
   pr.hidden = true;
 }
 function useAnalysis(A) {
@@ -1671,9 +1707,18 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
   } catch {}
 }
+// Show errors on screen so problems on a phone can be reported
+window.addEventListener('error', e => { if (e?.message && !/ResizeObserver|Script error/.test(e.message)) toast('Error: ' + e.message, 6000); });
+window.addEventListener('unhandledrejection', e => { const m = e?.reason?.message || String(e?.reason || ''); if (m && !/switched|cancel/i.test(m)) toast('Error: ' + m, 6000); });
 (async () => {
   const last = prefs.get('lastDoc', null);
   if (last) {
+    // If indexing was cut off last time (phone ran out of memory), don't reopen automatically in a loop
+    if (prefs.get('analysing', null) === last && !sessionStorage.getItem('wrr.resumed')) {
+      try { sessionStorage.setItem('wrr.resumed', '1'); } catch {}
+      await showWelcome('Indexing stopped part-way last time. The phone may have run short of memory. Tap your PDF under "On this device" to carry on from where it stopped.');
+      return;
+    }
     const rec = await db.get('files', last);
     if (rec?.blob) { await openBlob(rec.blob, rec.name, false); return; }
   }
