@@ -40,6 +40,20 @@ Tap **Choose PDF** and select your AS/NZS 3000 PDF. The first open reads every p
 
 **⋮ → My documents** lists PDFs saved on the device. You can remove any of them there, for example when a new amendment arrives. **⋮ → Rebuild contents & index** re-reads the current PDF.
 
+## Amendment alerts (updates.json)
+
+Each time the app opens online, it reads `updates.json` from your site. It compares the listed amendments and rulings with what your PDF includes (read from the cover, e.g. "Incorporating Amendment No. 1, 2, 3, and Ruling 1") and with any amendment PDFs you've added. For anything newer, it shows a pop-up at the bottom of the screen. **Got it** stops that alert for good on that device. **✕** hides it until the app is next opened. **Changes → Amendment check** shows the status and has **Check now** and **Show dismissed alerts** buttons.
+
+The standards websites block automatic checks, so `updates.json` is updated by hand. When a new amendment or ruling is published:
+1. On GitHub, open `updates.json` and click the pencil icon (Edit).
+2. Add a line to `"items"`. Give it a new `id`, `"type"` (`"amendment"` or `"ruling"`), its `"num"`, `"title"` and `"date"`, and optionally a `"url"`, for example:
+   `{ "id": "AS3000-2018-A4", "type": "amendment", "num": 4, "title": "Amendment No. 4", "date": "March 2027", "url": "https://www.standards.govt.nz/..." },`
+3. Change `"updated"` to today's date and commit.
+
+**Automatic check of EWRB news:** the scheduled job in `.github/workflows/check-ewrb.yml` runs every Monday morning (NZ time). It reads the EWRB news page (ewrb.govt.nz/about-us/news-and-notices) and looks for items about AS/NZS 3000 or the Wiring Rules that mention an amendment, ruling, new edition, draft or public comment. Anything new is added to `updates.json` automatically, so installed apps show an alert when they next open. An announcement of "Amendment No. X" becomes a proper amendment alert, compared against your copy. You can run the check by hand from the **Actions** tab (select the workflow, then **Run workflow**). GitHub may pause scheduled jobs in a repository with no activity for 60 days, and it emails you if it does. One click in the Actions tab turns it back on.
+
+For general messages, add an entry to `"notices"` with its own `id`, `"title"` and `"text"`, and optionally a `"url"`.
+
 ## Keyboard (Windows)
 
 `Ctrl+F` or `/` search · `B` bookmark · `Backspace` or `Alt+←` back · `←` `→` previous/next page · `+` `−` zoom

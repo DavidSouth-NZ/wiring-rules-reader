@@ -2,13 +2,13 @@
 // Everything runs on the device. The PDF is never uploaded.
 import './vendor/polyfills.js';
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=10';
-import { GUIDES } from './guides.js?v=10';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=12';
+import { GUIDES } from './guides.js?v=12';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.shim.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
 const ANALYSIS_VERSION = 10;
-const APP_VERSION = '10 (24 Sep 2026)';
+const APP_VERSION = '12 (24 Sep 2026)';
 const UA = navigator.userAgent || '';
 const IOS = /iP(hone|ad|od)/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SAFARI = IOS || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg\//.test(UA));
@@ -1608,6 +1608,13 @@ function renderChanges() {
   html += `<div class="ch-intro"><h2>2007 → 2018: what changed</h2><p>A New Zealand quick reference. Tap a clause number to open it. This is a summary written for this app, not the Standard's wording, so always read the clause itself.</p></div>`;
   html += `<div class="countdown"><div class="cd-num">${dl > 0 ? dl : '✓'}</div><div><b>${dl > 0 ? `day${dl === 1 ? '' : 's'} until the 2018 edition is mandatory for new work` : 'The 2018 edition is mandatory for new work'}</b><span>${dl > 0 ? 'From 13 November 2026 under the Electricity (Safety) Regulations. You can use it now.' : 'Since 13 November 2026. Work started under the 2007 edition in the transition year had to be finished by 12 November 2026.'}</span></div></div>`;
   html += `<details class="ch-sec"${prefs.get('chOpenTimeline', false) ? ' open' : ''} data-pref="chOpenTimeline"><summary>NZ transition rules</summary>${TIMELINE.map(t => `<div class="tl"><span>${esc(t.when)}</span><p>${esc(t.what)}</p></div>`).join('')}</details>`;
+  // update check status
+  {
+    const ht = haveText(), at = prefs.get('updCheckedAt', 0);
+    const items = UPD?.items || [];
+    const latestA = items.filter(x => x.type === 'amendment').sort((x, y) => y.num - x.num)[0], latestR = items.filter(x => x.type === 'ruling').sort((x, y) => y.num - x.num)[0];
+    html += `<div class="upd-status"><div><b>Amendment check</b><span>Your copy: ${esc(ht || 'couldn’t read which amendments it includes')}${UPD ? ` · Latest published: ${esc([latestA?.title, latestR?.title].filter(Boolean).join(' and ') || '—')} (list updated ${esc(UPD.updated || '?')})` : ''}${at ? ` · Checked ${new Date(at).toLocaleDateString()}` : ''}</span></div><div class="btnrow" style="padding:0"><button class="btn" id="updNow">Check now</button>${ackedIds().length ? `<button class="btn" id="updReset">Show dismissed alerts</button>` : ''}</div></div>`;
+  }
   // pinned highlights
   html += HIGHLIGHTS.map(h => `<div class="ch-alert"><div class="ch-alert-top">${icon('delta')}<span>Check on site</span></div><h3>${esc(h.head)}</h3><p>${esc(h.text)}</p><ul>${h.bullets.map(b => `<li>${esc(b)}</li>`).join('')}</ul><div>${refChips(h.refs)}</div>${h.source ? `<p class="fine">Source: <a href="${esc(h.source.url)}" target="_blank" rel="noopener">${esc(h.source.label)}</a>, checked against the clauses in the Standard.</p>` : ''}</div>`).join('');
   // amendment PDFs
@@ -1636,6 +1643,8 @@ function renderChanges() {
 $('#p-changes').addEventListener('click', e => {
   const t = e.target;
   const chip = t.closest('.chip'); if (chip) { const r = refToTarget(chip.dataset.ref); if (r.t) go(r.t); else toast(S.A ? chip.dataset.ref + ' was not found in this PDF' : 'Clause links work once the document has been indexed'); return; }
+  if (t.closest('#updNow')) { checkUpdates(true); return; }
+  if (t.closest('#updReset')) { prefs.set('ackUpdates', []); updHidden.clear(); showUpdateBar(); renderChanges(); toast('Dismissed alerts will show again'); return; }
   const f = t.closest('[data-f]'); if (f) { chFilter = f.dataset.f; prefs.set('chFilter', chFilter); renderChanges(); return; }
   if (t.closest('#amdAdd')) { $('#amendIn').click(); return; }
   const o = t.closest('[data-open]'); if (o) { openAmendment(o.dataset.open, null); return; }
@@ -1801,6 +1810,67 @@ $('#p-guides').addEventListener('input', e => {
   box.classList.remove('ok', 'bad'); const r = gdPass(stp.record.pass, e.target.value); if (r) box.classList.add(r);
 });
 
+
+/* ================================================================== UPDATE ALERTS
+   Reads updates.json from the app's own site (no other website is contacted). Shows a
+   closable bar at the bottom for any published amendment or ruling your copy doesn't
+   include, and for notices. "Got it" hides that item for good; ✕ hides it until next time. */
+let UPD = null;
+const updHidden = new Set();   // closed with ✕: hidden only until the app is next opened or refreshed
+const ackedIds = () => prefs.get('ackUpdates', []);
+function copyIncludes() {
+  // what the open Standard already incorporates, from its cover ("Incorporating Amendment No. 1, 2, 3, and Ruling 1")
+  const have = { amendment: new Set(), ruling: new Set(), known: false };
+  const main = S.parent ? null : S.A;
+  const txt = (main?.lines || []).slice(0, 6).flat().map(l => l.t).join(' ');
+  const m = txt.match(/Incorporating\s+(Amendments?\s+No[s]?\.?[^.]*?)(?:\s{2}|$|AUSTRALIAN|Australian|NEW ZEALAND|Electrical)/i) || txt.match(/Incorporating\s+(Amendment[^.]{0,60})/i);
+  if (m) {
+    have.known = true;
+    const [am, ru] = m[1].split(/Ruling/i);
+    for (const n of (am.match(/\d+/g) || [])) have.amendment.add(+n);
+    for (const n of ((ru || '').match(/\d+/g) || [])) have.ruling.add(+n);
+  }
+  for (const a of S.amends || []) { const mm = /^([AR])(\d+)$/.exec(a.short || ''); if (mm) (mm[1] === 'A' ? have.amendment : have.ruling).add(+mm[2]); }
+  return have;
+}
+function pendingAlerts() {
+  if (!UPD) return [];
+  const acked = ackedIds(), have = copyIncludes(), out = [];
+  const hidden = [...updHidden];
+  if (have.known) for (const it of UPD.items || []) {
+    const set = it.type === 'ruling' ? have.ruling : it.type === 'amendment' ? have.amendment : null;
+    if (set && !set.has(it.num) && !acked.includes(it.id) && !hidden.includes(it.id)) out.push({ ...it, kind: 'item' });
+  }
+  for (const n of UPD.notices || []) if (!n.hidden && !acked.includes(n.id) && !hidden.includes(n.id)) out.push({ ...n, kind: 'notice' });
+  return out;
+}
+function haveText() {
+  const h = copyIncludes(); if (!h.known) return '';
+  const a = [...h.amendment].sort((x, y) => x - y), r = [...h.ruling].sort((x, y) => x - y);
+  return [a.length ? `Amendment${a.length > 1 ? 's' : ''} ${a.join(', ')}` : '', r.length ? `Ruling ${r.join(', ')}` : ''].filter(Boolean).join(' and ');
+}
+function showUpdateBar() {
+  const bar = $('#updBar'); const list = pendingAlerts();
+  if (!list.length || !S.pdf) { bar.hidden = true; return; }
+  const it = list[0], ht = haveText();
+  const title = it.kind === 'item' ? `New for ${UPD.standard || 'the Standard'}: ${it.title}${it.date ? ' (' + it.date + ')' : ''}` : it.title;
+  const text = it.kind === 'item' ? `Your copy includes ${ht || 'earlier amendments'}. Get the new document from Standards NZ, then add its PDF under Changes → Add amendment PDF.${it.text ? ' ' + it.text : ''}` : it.text;
+  bar.innerHTML = `<div class="ub-ic">${icon('delta')}</div><div class="ub-body"><b>${esc(title)}</b><span>${esc(text)}</span><div class="ub-act">${it.url ? `<a class="btn" href="${esc(it.url)}" target="_blank" rel="noopener">Details</a>` : ''}<button class="btn primary" data-ack="${esc(it.id)}">Got it</button>${list.length > 1 ? `<span class="fine">1 of ${list.length}</span>` : ''}</div></div><button class="mini" data-hide="${esc(it.id)}" aria-label="Close for now">${icon('x')}</button>`;
+  bar.hidden = false;
+}
+$('#updBar').addEventListener('click', e => {
+  const ack = e.target.closest('[data-ack]'); if (ack) { prefs.set('ackUpdates', [...new Set([...ackedIds(), ack.dataset.ack])]); showUpdateBar(); renderChanges(); return; }
+  const hide = e.target.closest('[data-hide]'); if (hide) { updHidden.add(hide.dataset.hide); showUpdateBar(); }
+});
+async function checkUpdates(manual) {
+  try {
+    const r = await fetch('updates.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    UPD = await r.json(); prefs.set('updCache', UPD); prefs.set('updCheckedAt', Date.now());
+  } catch (e) { UPD = UPD || prefs.get('updCache', null); if (manual) toast('Couldn’t check for updates. Are you online?'); }
+  showUpdateBar(); renderChanges();
+  if (manual && UPD && !pendingAlerts().length) toast('You’re up to date');
+}
 /* ================================================================== OPEN / LIBRARY */
 async function showWelcome(msg) {
   $('#welcome').hidden = false;
@@ -1874,6 +1944,7 @@ async function openBlob(blob, name, isNew, opts = {}) {
   if (cached?.v === ANALYSIS_VERSION) useAnalysis(cached); else startAnalysis();
   if (S._pendingGoto) { const g = S._pendingGoto; S._pendingGoto = null; go(g, { record: false }); }
   updateNotice();
+  if (!UPD) checkUpdates(); else showUpdateBar();
 }
 async function startAnalysis() {
   const pr = $('#progress'); pr.hidden = false;
@@ -1924,6 +1995,7 @@ function useAnalysis(A) {
   buildSearchText();
   $('#progress').hidden = true;
   if (sizeChanged) layout();
+  showUpdateBar();
   for (const i of [...S.rendered]) pageEls[i].dataset.stale = '1';
   queueRender();
   renderAllPanels();
