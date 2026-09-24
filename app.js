@@ -2,13 +2,13 @@
 // Everything runs on the device. The PDF is never uploaded.
 import './vendor/polyfills.js';
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=9';
-import { GUIDES } from './guides.js?v=9';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=10';
+import { GUIDES } from './guides.js?v=10';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.shim.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
 const ANALYSIS_VERSION = 10;
-const APP_VERSION = '8 (24 Sep 2026)';
+const APP_VERSION = '10 (24 Sep 2026)';
 const UA = navigator.userAgent || '';
 const IOS = /iP(hone|ad|od)/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SAFARI = IOS || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg\//.test(UA));
@@ -567,6 +567,7 @@ async function renderPage(i) {
     freeCanvas(d.querySelector('canvas'));
     d.replaceChildren(canvas, ov);
     d._scale = scale; delete d.dataset.stale; S.rendered.add(i);
+    drawHighlights(i);
     buildOverlay(i, page, ov).catch(e => diag('links p' + (i + 1), e));
     try {
       const tc = await getText(i);
@@ -1085,13 +1086,37 @@ $('#searchForm').addEventListener('submit', e => {
 $('#qClear').onclick = () => { $('#q').value = ''; $('#qClear').hidden = true; runSearch(''); $('#q').focus(); };
 
 /* ---- saved: bookmarks, starred tables, recent */
+/* ================================================================== SAVED: groups, bookmarks, highlights
+   Groups are colour-coded sections. Bookmarks and highlights belong to a group (or none).
+   Highlights are stored as rectangles in page fractions, so they sit correctly at any zoom. */
+const HL_COLORS = ['#FFD83D', '#6FD35A', '#4FC3F7', '#FF7AB8', '#FF9F43', '#B08CFF', '#FF5C5C', '#A8B3B8'];
+const HL_NAMES = ['Yellow', 'Green', 'Blue', 'Pink', 'Orange', 'Purple', 'Red', 'Grey'];
+const uid = () => crypto.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+const grpOf = id => (S.user.groups || []).find(g => g.id === id) || null;
+const grpColor = id => grpOf(id)?.color || HL_COLORS[0];
+function swatches(sel, attr = 'data-col') { return `<div class="sv-sw">${HL_COLORS.map((c, k) => `<button ${attr}="${c}" style="--c:${c}" aria-label="${HL_NAMES[k]}" aria-pressed="${c === sel}"></button>`).join('')}</div>`; }
+function moveSelect(cur) {
+  return `<select class="sv-move" aria-label="Move to group"><option value="">Move to…</option>${(S.user.groups || []).map(g => `<option value="${g.id}"${g.id === cur ? ' disabled' : ''}>${esc(g.name)}</option>`).join('')}<option value="__none"${!cur ? ' disabled' : ''}>No group</option></select>`;
+}
 function renderSaved() {
   const el = $('#p-saved');
   if (!S.id) { el.innerHTML = ''; return; }
-  const U = S.user;
-  let html = `<div class="group-h">Bookmarks</div>`;
-  if (!U.bookmarks.length) html += `<p class="hint">Tap the bookmark button in the top bar to save the page you're on.</p>`;
-  html += U.bookmarks.slice().sort(cmpPos).map(b => `<div class="bm" data-id="${b.id}"><button class="go"><b>${esc(b.title)}</b><span>p. ${esc(pageLabel(b.p))}</span></button><button class="mini" data-act="edit" aria-label="Rename">${icon('edit')}</button><button class="mini" data-act="del" aria-label="Delete bookmark">${icon('trash')}</button></div>`).join('');
+  const U = S.user; U.groups ||= []; U.highlights ||= [];
+  const itemHtml = (kind, it) => {
+    const col = grpColor(it.g);
+    if (kind === 'bm') return `<div class="sv-it" data-kind="bm" data-id="${it.id}"><span class="sv-ic" style="color:${it.g ? col : 'var(--ink-3)'}">${icon('bm')}</span><button class="go"><b>${esc(it.title)}</b><span>p. ${esc(pageLabel(it.p))}</span></button>${moveSelect(it.g)}<button class="mini" data-act="edit" aria-label="Rename">${icon('edit')}</button><button class="mini" data-act="del" aria-label="Delete">${icon('trash')}</button></div>`;
+    return `<div class="sv-it hl" data-kind="hl" data-id="${it.id}"><span class="sv-bar" style="background:${col}"></span><button class="go"><q>${esc(it.text.length > 220 ? it.text.slice(0, 220) + '…' : it.text)}</q><span>p. ${esc(pageLabel(it.p))}${it.ctx ? ' · ' + esc(it.ctx) : ''}</span></button>${moveSelect(it.g)}<button class="mini" data-act="del" aria-label="Remove highlight">${icon('trash')}</button></div>`;
+  };
+  const itemsIn = gid => [...U.bookmarks.filter(b => (b.g || null) === gid).map(b => ['bm', b]), ...U.highlights.filter(h => (h.g || null) === gid).map(h => ['hl', h])].sort((x, y) => cmpPos(x[1], y[1]));
+  let html = `<div class="sv-head"><div><h2>Saved</h2><p>Group bookmarks and highlights into colour-coded sections. To highlight, select text in the PDF, then right-click (PC) or use the bar that pops up (phone).</p></div></div>
+    <div class="btnrow"><button class="btn" id="svNew">${icon('plus')}New group</button></div>
+    <div class="sv-newbox" id="svNewBox" hidden><input id="svNewName" placeholder="Group name, e.g. RCD rules, Bathroom zones" aria-label="New group name">${swatches(HL_COLORS[(U.groups.length) % HL_COLORS.length])}<div class="btnrow" style="padding:0"><button class="btn primary" id="svCreate">Create group</button><button class="btn" id="svCancel">Cancel</button></div></div>`;
+  for (const g of U.groups) {
+    const items = itemsIn(g.id);
+    html += `<section class="sv-grp" data-g="${g.id}" style="--gc:${g.color}"><header><button class="sv-dot" data-act="color" aria-label="Change colour"></button><b class="sv-name">${esc(g.name)}</b><span class="count">${items.length}</span><button class="mini" data-act="gedit" aria-label="Rename group">${icon('edit')}</button><button class="mini" data-act="gdel" aria-label="Delete group">${icon('trash')}</button></header><div class="sv-pal" hidden>${swatches(g.color)}</div>${items.map(([k, it]) => itemHtml(k, it)).join('') || `<p class="hint">Empty. Select text in the PDF and add it here, or move a bookmark here.</p>`}</section>`;
+  }
+  const loose = itemsIn(null);
+  html += `<section class="sv-grp loose"><header><b class="sv-name">${U.groups.length ? 'Not in a group' : 'Bookmarks and highlights'}</b><span class="count">${loose.length}</span></header>${loose.map(([k, it]) => itemHtml(k, it)).join('') || `<p class="hint">Tap the bookmark button in the top bar to save the page you're on.</p>`}</section>`;
   if (S.A) {
     const favs = U.favTables.map(id => ({ id, t: resolveRef('table', id), title: (S.cat_table || []).find(x => x.id === id)?.title || '' }));
     html += `<div class="group-h">Starred tables</div>`;
@@ -1101,43 +1126,215 @@ function renderSaved() {
     html += `<div class="group-h">Recently opened references</div>`;
     html += U.recent.map((r, k) => `<button class="row" data-recent="${k}"><span class="ttl">${esc(r.label)}</span><span class="pg">${esc(pageLabel(r.p))}</span></button>`).join('');
   }
-  html += `<div class="group-h">Move to another device</div><div class="btnrow"><button class="btn" id="expBtn">Copy bookmarks</button><button class="btn" id="impBtn">Paste bookmarks</button></div><div class="btnrow" id="impBox" hidden><textarea id="impTxt" rows="4" style="width:100%;border-radius:9px;border:1px solid var(--rule);background:var(--surface-2);padding:8px;font:12px var(--f-mono)" placeholder="Paste copied bookmarks here"></textarea><button class="btn primary" id="impGo">Add bookmarks</button></div>`;
+  html += `<div class="group-h">Move to another device</div><div class="btnrow"><button class="btn" id="expBtn">Copy saved items</button><button class="btn" id="impBtn">Paste saved items</button></div><div class="btnrow" id="impBox" hidden><textarea id="impTxt" rows="4" style="width:100%;border-radius:9px;border:1px solid var(--rule);background:var(--surface-2);padding:8px;font:12px var(--f-mono)" placeholder="Paste copied items here"></textarea><button class="btn primary" id="impGo">Add items</button></div>`;
   el.innerHTML = html;
 }
+function afterSavedChange() { saveUser(); renderSaved(); onPageChange(); redrawHighlights(); }
+$('#p-saved').addEventListener('change', e => {
+  const sel = e.target.closest('.sv-move'); if (!sel) return;
+  const it = sel.closest('.sv-it'); const U = S.user;
+  const obj = (it.dataset.kind === 'bm' ? U.bookmarks : U.highlights).find(x => x.id === it.dataset.id); if (!obj) return;
+  obj.g = sel.value === '__none' ? null : sel.value;
+  if (obj.g) prefs.set('lastGroup', obj.g);
+  afterSavedChange(); toast(obj.g ? 'Moved to ' + grpOf(obj.g).name : 'Moved out of the group');
+});
 $('#p-saved').addEventListener('click', async e => {
-  const U = S.user;
-  const bm = e.target.closest('.bm');
-  if (bm) {
-    const b = U.bookmarks.find(x => x.id === bm.dataset.id); if (!b) return;
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'del') { U.bookmarks = U.bookmarks.filter(x => x !== b); saveUser(); renderSaved(); onPageChange(); toast('Bookmark removed'); return; }
-    if (act === 'edit') {
-      bm.innerHTML = `<input id="bmEdit" value="${esc(b.title)}" aria-label="Bookmark name"><button class="mini" data-act="ok" aria-label="Save">✓</button>`;
-      const inp = $('#bmEdit'); inp.focus(); inp.select();
-      const done = () => { b.title = clean(inp.value) || b.title; saveUser(); renderSaved(); };
-      inp.onkeydown = ev => { if (ev.key === 'Enter') done(); if (ev.key === 'Escape') renderSaved(); };
-      bm.querySelector('[data-act="ok"]').onclick = done; return;
+  const U = S.user; const t = e.target;
+  // new group
+  if (t.closest('#svNew')) { $('#svNewBox').hidden = false; $('#svNewName').focus(); return; }
+  if (t.closest('#svCancel')) { $('#svNewBox').hidden = true; return; }
+  const nsw = t.closest('#svNewBox [data-col]'); if (nsw) { $$('#svNewBox [data-col]').forEach(b => b.setAttribute('aria-pressed', b === nsw)); return; }
+  if (t.closest('#svCreate')) {
+    const name = clean($('#svNewName').value); if (!name) { $('#svNewName').focus(); return; }
+    const color = $('#svNewBox [aria-pressed="true"]')?.dataset.col || HL_COLORS[0];
+    U.groups.push({ id: uid(), name, color }); afterSavedChange(); toast('Group “' + name + '” created'); return;
+  }
+  // group header actions
+  const grp = t.closest('.sv-grp[data-g]'); const g = grp && grpOf(grp.dataset.g);
+  const act = t.closest('[data-act]')?.dataset.act;
+  if (g && act === 'color') { const pal = grp.querySelector('.sv-pal'); pal.hidden = !pal.hidden; return; }
+  const psw = t.closest('.sv-pal [data-col]'); if (g && psw) { g.color = psw.dataset.col; afterSavedChange(); return; }
+  if (g && act === 'gedit') {
+    const nm = grp.querySelector('.sv-name'); nm.outerHTML = `<input class="sv-rename" value="${esc(g.name)}" aria-label="Group name">`;
+    const inp = grp.querySelector('.sv-rename'); inp.focus(); inp.select();
+    const done = () => { g.name = clean(inp.value) || g.name; afterSavedChange(); };
+    inp.onkeydown = ev => { if (ev.key === 'Enter') done(); if (ev.key === 'Escape') renderSaved(); }; inp.onblur = done; return;
+  }
+  if (g && act === 'gdel') {
+    const b = t.closest('[data-act]');
+    if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.classList.add('armed'); toast('Tap the bin again to delete “' + g.name + '”. Its bookmarks and highlights are kept, outside any group.', 4000); return; }
+    U.groups = U.groups.filter(x => x !== g);
+    for (const x of [...U.bookmarks, ...U.highlights]) if (x.g === g.id) x.g = null;
+    afterSavedChange(); toast('Group deleted'); return;
+  }
+  // items
+  const it = t.closest('.sv-it');
+  if (it) {
+    const list = it.dataset.kind === 'bm' ? U.bookmarks : U.highlights;
+    const obj = list.find(x => x.id === it.dataset.id); if (!obj) return;
+    if (act === 'del') {
+      if (it.dataset.kind === 'bm') U.bookmarks = U.bookmarks.filter(x => x !== obj); else U.highlights = U.highlights.filter(x => x !== obj);
+      afterSavedChange(); toast(it.dataset.kind === 'bm' ? 'Bookmark removed' : 'Highlight removed'); return;
     }
-    if (e.target.closest('.go')) go({ p: b.p, y: b.y, label: b.title });
+    if (act === 'edit') {
+      const go_ = it.querySelector('.go'); go_.outerHTML = `<input class="sv-rename" value="${esc(obj.title)}" aria-label="Bookmark name">`;
+      const inp = it.querySelector('.sv-rename'); inp.focus(); inp.select();
+      const done = () => { obj.title = clean(inp.value) || obj.title; afterSavedChange(); };
+      inp.onkeydown = ev => { if (ev.key === 'Enter') done(); if (ev.key === 'Escape') renderSaved(); }; inp.onblur = done; return;
+    }
+    if (t.closest('.go')) { const f = obj.parts?.[0]; go({ p: obj.p, y: f ? f.rects[0].y * S.sizes[obj.p][1] : obj.y, h: f ? f.rects[0].h * S.sizes[obj.p][1] : undefined, label: obj.title || 'Highlight' }); }
     return;
   }
-  const tr = e.target.closest('[data-table]'); if (tr) { go(resolveRef('table', tr.dataset.table)); return; }
-  const rr = e.target.closest('[data-recent]'); if (rr) { go(U.recent[+rr.dataset.recent], { record: true }); return; }
-  if (e.target.id === 'expBtn') {
-    const data = JSON.stringify({ app: 'wiring-rules-reader', bookmarks: U.bookmarks, favTables: U.favTables });
-    try { await navigator.clipboard.writeText(data); toast('Bookmarks copied — paste them into the app on your other device'); }
+  const tr = t.closest('[data-table]'); if (tr) { go(resolveRef('table', tr.dataset.table)); return; }
+  const rr = t.closest('[data-recent]'); if (rr) { go(U.recent[+rr.dataset.recent], { record: true }); return; }
+  if (t.id === 'expBtn') {
+    const data = JSON.stringify({ app: 'wiring-rules-reader', v: 2, bookmarks: U.bookmarks, favTables: U.favTables, groups: U.groups, highlights: U.highlights });
+    try { await navigator.clipboard.writeText(data); toast('Saved items copied — paste them into the app on your other device'); }
     catch { $('#impBox').hidden = false; $('#impTxt').value = data; $('#impTxt').select(); toast('Select and copy the text shown'); }
   }
-  if (e.target.id === 'impBtn') { $('#impBox').hidden = false; $('#impTxt').value = ''; $('#impTxt').focus(); }
-  if (e.target.id === 'impGo') {
+  if (t.id === 'impBtn') { $('#impBox').hidden = false; $('#impTxt').value = ''; $('#impTxt').focus(); }
+  if (t.id === 'impGo') {
     try {
       const d = JSON.parse($('#impTxt').value);
       let added = 0;
-      for (const b of d.bookmarks || []) if (!U.bookmarks.some(x => x.p === b.p && x.title === b.title)) { U.bookmarks.push({ ...b, id: b.id || crypto.randomUUID?.() || String(Math.random()) }); added++; }
-      for (const t of d.favTables || []) if (!U.favTables.includes(t)) U.favTables.push(t);
-      saveUser(); renderSaved(); renderCatalogue('table'); onPageChange(); toast(`${added} bookmark${added === 1 ? '' : 's'} added`);
-    } catch { toast('That text is not a bookmark export'); }
+      for (const g of d.groups || []) if (!U.groups.some(x => x.id === g.id)) U.groups.push(g);
+      for (const b of d.bookmarks || []) if (!U.bookmarks.some(x => x.id === b.id || (x.p === b.p && x.title === b.title))) { U.bookmarks.push({ ...b, id: b.id || uid() }); added++; }
+      for (const h of d.highlights || []) if (!U.highlights.some(x => x.id === h.id)) { U.highlights.push(h); added++; }
+      for (const t2 of d.favTables || []) if (!U.favTables.includes(t2)) U.favTables.push(t2);
+      afterSavedChange(); renderCatalogue('table'); toast(`${added} item${added === 1 ? '' : 's'} added`);
+    } catch { toast('That text is not a saved-items export'); }
   }
+});
+
+/* ---------- highlighting in the PDF */
+const selMenu = () => $('#selMenu');
+function hideSelMenu() { const m = selMenu(); if (m) m.hidden = true; }
+function selectionInfo() {
+  const sel = getSelection(); if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const anc = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  if (!anc || !pagesEl.contains(anc)) return null;
+  const text = clean(sel.toString()); if (!text) return null;
+  const raw = [...range.getClientRects()].filter(r => r.width > 1 && r.height > 1);
+  if (!raw.length) return null;
+  const hs = raw.map(r => r.height).sort((a, b) => a - b); const med = hs[Math.floor(hs.length / 2)];
+  const parts = new Map();
+  for (const r of raw) {
+    if (r.height > med * 2.2) continue;   // skip container boxes
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const p = [...S.rendered].find(i => { const b = pageEls[i].getBoundingClientRect(); return cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom; });
+    if (p == null) continue;
+    const b = pageEls[p].getBoundingClientRect();
+    const fr = { x: (r.left - b.left) / b.width, y: (r.top - b.top) / b.height, w: r.width / b.width, h: r.height / b.height };
+    if (!parts.has(p)) parts.set(p, []); parts.get(p).push(fr);
+  }
+  if (!parts.size) return null;
+  const out = [...parts].sort((x, y) => x[0] - y[0]).map(([p, rects]) => ({ p, rects: mergeRects(rects) }));
+  const last = raw[raw.length - 1], first = raw[0];
+  return { text, parts: out, box: { left: first.left, top: first.top, right: last.right, bottom: last.bottom } };
+}
+function mergeRects(rs) {
+  rs.sort((a, b) => a.y - b.y || a.x - b.x);
+  const out = [];
+  for (const r of rs) {
+    const o = out.find(q => Math.min(q.y + q.h, r.y + r.h) - Math.max(q.y, r.y) > Math.min(q.h, r.h) * 0.5 && r.x <= q.x + q.w + 0.004 && r.x + r.w >= q.x - 0.004);
+    if (o) { const x1 = Math.min(o.x, r.x), y1 = Math.min(o.y, r.y), x2 = Math.max(o.x + o.w, r.x + r.w), y2 = Math.max(o.y + o.h, r.y + r.h); Object.assign(o, { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }); }
+    else out.push({ ...r });
+  }
+  return out.map(r => ({ x: +r.x.toFixed(4), y: +r.y.toFixed(4), w: +r.w.toFixed(4), h: +r.h.toFixed(4) }));
+}
+function placeMenu(m, x, y) {
+  m.hidden = false;
+  const w = m.offsetWidth, h = m.offsetHeight, W = innerWidth, H = innerHeight;
+  m.style.left = Math.max(8, Math.min(W - w - 8, x - w / 2)) + 'px';
+  m.style.top = (y + h + 12 > H ? Math.max(8, y - h - 40) : y + 12) + 'px';
+}
+let pendingSel = null;
+function showSelMenu(info, x, y) {
+  pendingSel = info;
+  const U = S.user; U.groups ||= [];
+  const m = selMenu();
+  m.innerHTML = `<div class="sm-h">Highlight and save to</div><div class="sm-groups">${U.groups.map(g => `<button data-addg="${g.id}"><i style="background:${g.color}"></i>${esc(g.name)}</button>`).join('')}<button data-addg=""><i style="background:${HL_COLORS[0]}"></i>No group</button></div>
+    <div class="sm-new" hidden><input id="smName" placeholder="New group name" aria-label="New group name">${swatches(HL_COLORS[U.groups.length % HL_COLORS.length])}<button class="btn primary" id="smCreate">Create and highlight</button></div>
+    <div class="sm-row"><button id="smNew">${icon('plus')}New group</button><button id="smCopy">${icon('copy')}Copy</button><button id="smX" aria-label="Close">${icon('x')}</button></div>`;
+  placeMenu(m, x, y);
+}
+function showHlMenu(hl, x, y) {
+  const U = S.user; const m = selMenu(); pendingSel = null;
+  m.innerHTML = `<div class="sm-h">Highlight${hl.g ? ' · ' + esc(grpOf(hl.g)?.name || '') : ''}</div><div class="sm-quote">“${esc(hl.text.slice(0, 120))}${hl.text.length > 120 ? '…' : ''}”</div>
+    <div class="sm-groups">${U.groups.filter(g => g.id !== hl.g).map(g => `<button data-moveg="${g.id}" data-hl="${hl.id}"><i style="background:${g.color}"></i>${esc(g.name)}</button>`).join('')}${hl.g ? `<button data-moveg="" data-hl="${hl.id}"><i style="background:${HL_COLORS[0]}"></i>No group</button>` : ''}</div>
+    <div class="sm-row"><button data-rmhl="${hl.id}">${icon('trash')}Remove</button><button id="smCopyHl" data-hl="${hl.id}">${icon('copy')}Copy</button><button id="smX" aria-label="Close">${icon('x')}</button></div>`;
+  placeMenu(m, x, y);
+}
+function addHighlight(info, gid) {
+  const U = S.user; U.highlights ||= [];
+  const p = info.parts[0].p, y = info.parts[0].rects[0].y * S.sizes[p][1];
+  const c = contextAt(p, y);
+  U.highlights.push({ id: uid(), g: gid || null, text: info.text, p, y, parts: info.parts, ctx: c ? c.id : '', created: Date.now() });
+  if (gid) prefs.set('lastGroup', gid);
+  getSelection()?.removeAllRanges(); hideSelMenu();
+  afterSavedChange();
+  toast(gid ? 'Highlighted in “' + grpOf(gid).name + '”' : 'Highlighted');
+}
+function drawHighlights(i) {
+  const d = pageEls[i]; if (!d || !S.rendered.has(i)) return;
+  d.querySelector('.hls')?.remove();
+  const hs = (S.user.highlights || []).filter(h => h.parts.some(pt => pt.p === i));
+  if (!hs.length) return;
+  const box = document.createElement('div'); box.className = 'hls';
+  for (const h of hs) for (const pt of h.parts) if (pt.p === i) for (const r of pt.rects) {
+    const e = document.createElement('div'); e.className = 'hlr';
+    Object.assign(e.style, { left: r.x * 100 + '%', top: r.y * 100 + '%', width: r.w * 100 + '%', height: r.h * 100 + '%', background: grpColor(h.g) });
+    box.appendChild(e);
+  }
+  const cv = d.querySelector('canvas'); d.insertBefore(box, cv ? cv.nextSibling : d.firstChild);
+}
+function redrawHighlights() { for (const i of S.rendered) drawHighlights(i); }
+function hlAt(e) {
+  const pg = e.target.closest?.('.page'); if (!pg) return null;
+  const i = +pg.dataset.p, b = pg.getBoundingClientRect();
+  const fx = (e.clientX - b.left) / b.width, fy = (e.clientY - b.top) / b.height;
+  return (S.user.highlights || []).slice().reverse().find(h => h.parts.some(pt => pt.p === i && pt.rects.some(r => fx >= r.x && fx <= r.x + r.w && fy >= r.y - 0.002 && fy <= r.y + r.h + 0.002))) || null;
+}
+let rcInfo = null;   // selection captured as the right button goes down (some browsers clear it on right-click)
+pagesEl.addEventListener('pointerdown', e => { rcInfo = e.button === 2 ? selectionInfo() : null; }, true);
+pagesEl.addEventListener('mousedown', e => { if (e.button === 2 && !rcInfo) rcInfo = selectionInfo(); }, true);
+pagesEl.addEventListener('contextmenu', e => {
+  const info = rcInfo || selectionInfo(); rcInfo = null;
+  if (info) { e.preventDefault(); showSelMenu(info, e.clientX, e.clientY); return; }
+  const hl = hlAt(e); if (hl) { e.preventDefault(); showHlMenu(hl, e.clientX, e.clientY); }
+});
+pagesEl.addEventListener('click', e => {
+  if (e.target.closest('span.x, .rowlink, .annlink, [data-retry]')) return;
+  const sel = getSelection(); if (sel && !sel.isCollapsed) return;
+  const hl = hlAt(e); if (hl) showHlMenu(hl, e.clientX, e.clientY);
+});
+// phones and tablets: show the bar as soon as some text is selected
+let selT = 0;
+document.addEventListener('selectionchange', () => {
+  if (!matchMedia('(pointer: coarse)').matches) return;
+  clearTimeout(selT);
+  selT = setTimeout(() => { const info = selectionInfo(); if (info) showSelMenu(info, (info.box.left + info.box.right) / 2, info.box.bottom + 8); else if (pendingSel) hideSelMenu(); }, 450);
+});
+document.addEventListener('pointerdown', e => { const m = selMenu(); if (m && !m.hidden && !m.contains(e.target)) { if (!pendingSel || !e.target.closest('.textLayer')) hideSelMenu(); } }, true);
+viewer.addEventListener('scroll', () => { if (!matchMedia('(pointer: coarse)').matches) hideSelMenu(); }, { passive: true });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideSelMenu(); });
+document.addEventListener('click', async e => {
+  const m = selMenu(); if (!m || m.hidden || !m.contains(e.target)) return;
+  const t = e.target; const U = S.user;
+  const ag = t.closest('[data-addg]'); if (ag && pendingSel) { addHighlight(pendingSel, ag.dataset.addg || null); return; }
+  if (t.closest('#smNew')) { m.querySelector('.sm-new').hidden = false; m.querySelector('#smName').focus(); return; }
+  const sw = t.closest('.sm-new [data-col]'); if (sw) { m.querySelectorAll('.sm-new [data-col]').forEach(b => b.setAttribute('aria-pressed', b === sw)); return; }
+  if (t.closest('#smCreate') && pendingSel) {
+    const name = clean(m.querySelector('#smName').value); if (!name) { m.querySelector('#smName').focus(); return; }
+    const color = m.querySelector('.sm-new [aria-pressed="true"]')?.dataset.col || HL_COLORS[0];
+    const g = { id: uid(), name, color }; U.groups.push(g); addHighlight(pendingSel, g.id); return;
+  }
+  if (t.closest('#smCopy') && pendingSel) { try { await navigator.clipboard.writeText(pendingSel.text); toast('Copied'); } catch { toast('Copy isn’t available here'); } hideSelMenu(); return; }
+  const mg = t.closest('[data-moveg]'); if (mg) { const h = U.highlights.find(x => x.id === mg.dataset.hl); if (h) { h.g = mg.dataset.moveg || null; afterSavedChange(); toast(h.g ? 'Moved to “' + grpOf(h.g).name + '”' : 'Moved out of the group'); } hideSelMenu(); return; }
+  const rm = t.closest('[data-rmhl]'); if (rm) { U.highlights = U.highlights.filter(x => x.id !== rm.dataset.rmhl); afterSavedChange(); hideSelMenu(); toast('Highlight removed'); return; }
+  const ch = t.closest('#smCopyHl'); if (ch) { const h = U.highlights.find(x => x.id === ch.dataset.hl); try { await navigator.clipboard.writeText(h.text); toast('Copied'); } catch {} hideSelMenu(); return; }
+  if (t.closest('#smX')) { hideSelMenu(); getSelection()?.removeAllRanges(); }
 });
 function toggleBookmark() {
   if (!S.id) return;
@@ -1150,8 +1347,9 @@ function toggleBookmark() {
     const ctx = contextAt(p);
     const tb = S.A && Object.entries(S.A.tables).find(([, t]) => t.p <= p && (t.last ?? t.p) >= p);
     const title = tb ? `Table ${tb[0]} ${tb[1].title}` : ctx ? `${ctx.id} ${ctx.title}` : `Page ${pageLabel(p)}`;
-    U.bookmarks.push({ id: crypto.randomUUID?.() || String(Date.now()), p, y, title, created: Date.now() });
-    toast('Bookmarked: ' + title.slice(0, 60));
+    const lg = prefs.get('lastGroup', null); const g = (U.groups || []).some(x => x.id === lg) ? lg : null;
+    U.bookmarks.push({ id: uid(), p, y, title, g, created: Date.now() });
+    toast('Bookmarked' + (g ? ' in “' + grpOf(g).name + '”' : '') + ': ' + title.slice(0, 50));
   }
   saveUser(); onPageChange(); renderSaved();
 }
@@ -1657,7 +1855,7 @@ async function openBlob(blob, name, isNew, opts = {}) {
     try { navigator.storage?.persist?.(); } catch {}
   } else { const rec = await db.get('files', id); if (rec) { rec.opened = Date.now(); db.put('files', id, rec); } }
   prefs.set('lastDoc', opts.parent || id);
-  S.user = Object.assign({ bookmarks: [], favTables: [], recent: [], lastPos: null, amendments: [] }, await db.get('user', id) || {});
+  S.user = Object.assign({ bookmarks: [], favTables: [], recent: [], lastPos: null, amendments: [], groups: [], highlights: [] }, await db.get('user', id) || {});
   if (opts.label) S.name = opts.label;
   await loadAmendments();
   $('#docName').textContent = S.name; document.title = S.name + ' · Wiring Rules Reader';
