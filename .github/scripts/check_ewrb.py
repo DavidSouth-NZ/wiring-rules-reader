@@ -38,14 +38,40 @@ def relevant(title, body=""):
         return False
     return bool(TOPIC.search(title) and (CHANGE.search(title) or re.search(r"amendment|ruling|new edition|public comment", body, re.I)))
 
+DEFAULT = {
+    "about": "Wiring Rules Reader update list. The app reads this file each time it opens online.",
+    "updated": "", "standard": "AS/NZS 3000:2018",
+    "items": [
+        {"id": "AS3000-2018-A1", "type": "amendment", "num": 1, "title": "Amendment No. 1", "date": "January 2020"},
+        {"id": "AS3000-2018-A2", "type": "amendment", "num": 2, "title": "Amendment No. 2", "date": "April 2021"},
+        {"id": "AS3000-2018-A3", "type": "amendment", "num": 3, "title": "Amendment No. 3", "date": "May 2023"},
+        {"id": "AS3000-2018-R1", "type": "ruling", "num": 1, "title": "Ruling 1", "date": "May 2024"}
+    ],
+    "notices": []
+}
+
+def load_updates():
+    try:
+        with open(UPDATES, encoding="utf-8") as f:
+            return json.load(f), False
+    except FileNotFoundError:
+        print("::warning::updates.json was missing, so a new one has been created.")
+        return json.loads(json.dumps(DEFAULT)), True
+    except json.JSONDecodeError as e:
+        print(f"::error::updates.json isn't valid JSON (line {e.lineno}, column {e.colno}): {e.msg}. Fix it on GitHub; nothing was changed.")
+        sys.exit(1)
+
 def main():
-    data = json.load(open(UPDATES, encoding="utf-8"))
+    data, created = load_updates()
     data.setdefault("items", []); data.setdefault("notices", [])
     known_ids = {x["id"] for x in data["items"] + data["notices"]}
     try:
         page = fetch(NEWS_URL)
     except Exception as e:
-        print("Could not read EWRB news:", e); return 0   # don't fail the job for a temporary outage
+        print(f"::warning::Couldn't read the EWRB news page this time ({e}). It will try again next week.")
+        if created:
+            json.dump(data, open(UPDATES, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+        return 0   # a temporary outage shouldn't fail the job
     items = news_items(page)
     print(f"Found {len(items)} news links")
     added = 0
@@ -80,7 +106,7 @@ def main():
         data["notices"].append({"id": nid, "title": "EWRB: " + title, "text": "The Electrical Workers Registration Board has posted news about the Wiring Rules. Tap Details to read it.", "url": url, "source": "ewrb-auto", "hidden": made_item})
         known_ids.add(nid); added += 1
         print("Added:", title)
-    if added:
+    if added or created:
         data["updated"] = datetime.date.today().isoformat()
         with open(UPDATES, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False); f.write("\n")
@@ -88,4 +114,11 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Exception as e:   # report clearly instead of a bare crash
+        import traceback; traceback.print_exc()
+        print(f"::error::The EWRB check hit a problem: {type(e).__name__}: {e}")
+        sys.exit(1)
