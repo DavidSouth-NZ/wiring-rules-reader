@@ -9,16 +9,14 @@ permissions:
   contents: write
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: actions/checkout@v5
       - name: Check EWRB news
-        run: python .github/scripts/check_ewrb.py
+        run: python3 .github/scripts/check_ewrb.py
       - name: Save any changes
         run: |
+          git add -N updates.json 2>/dev/null || true
           if git diff --quiet -- updates.json; then echo "No new Wiring Rules news."; exit 0; fi
           git config user.name "wiring-rules-bot"
           git config user.email "actions@users.noreply.github.com"
