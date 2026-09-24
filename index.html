@@ -308,6 +308,10 @@ body.sub-doc #pages{padding-top:72px}
 .zs-note{font-size:12px;color:var(--ink-3);line-height:1.45}
 .zs-note a,.zs-note button{color:var(--accent);background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}
 /* ---------- viewer ---------- */
+.hiddenCanvasElement{position:absolute;top:0;left:0;width:0;height:0;display:none}
+.page .ph.err{width:80%;text-align:center;font:500 13px/1.5 var(--f-ui);color:#8a2a1c}
+.page .ph.err small{color:#6b6b6b}
+.page .ph.err .btn{margin-top:8px}
 .viewer{position:relative;overflow:auto;background:var(--desk);min-height:0;touch-action:pan-x pan-y;overscroll-behavior:contain}
 #pages{padding:14px 12px 80px;width:max-content;min-width:100%;transform-origin:0 0}
 .page{position:relative;margin:0 auto 12px;background:#fff;box-shadow:var(--shadow);--scale-round-x:1px;--scale-round-y:1px}
@@ -509,6 +513,7 @@ body.sub-doc #pages{padding-top:72px}
   <button id="mAmend"><svg class="icon"><use href="#i-plus"/></svg>Add amendment PDF…</button>
   <input type="file" id="amendIn" accept="application/pdf,.pdf" hidden>
   <button id="mLibrary"><svg class="icon"><use href="#i-list"/></svg>My documents</button>
+  <button id="mReport"><svg class="icon"><use href="#i-copy"/></svg>Copy problem report</button>
   <button id="mReindex"><svg class="icon"><use href="#i-az"/></svg>Rebuild contents &amp; index</button>
 </div>
 
@@ -537,6 +542,6 @@ body.sub-doc #pages{padding-top:72px}
 </section>
 
 <div class="toast" id="toast" hidden role="status"></div>
-<script type="module" src="app.js?v=7"></script>
+<script type="module" src="app.js?v=8"></script>
 </body>
 </html>

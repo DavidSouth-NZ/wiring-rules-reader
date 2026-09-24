@@ -1,12 +1,14 @@
 // Wiring Rules Reader — offline PDF reader with contents, tables, index, search and bookmarks.
 // Everything runs on the device. The PDF is never uploaded.
+import './vendor/polyfills.js';
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=7';
-import { GUIDES } from './guides.js?v=7';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=8';
+import { GUIDES } from './guides.js?v=8';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.js', import.meta.url).href;
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.shim.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
 const ANALYSIS_VERSION = 10;
+const APP_VERSION = '8 (24 Sep 2026)';
 const UA = navigator.userAgent || '';
 const IOS = /iP(hone|ad|od)/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SAFARI = IOS || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg\//.test(UA));
@@ -527,37 +529,62 @@ async function getText(i) {
   S.textCache.set(i, tc); if (S.textCache.size > (LOWMEM ? 6 : 30)) S.textCache.delete(S.textCache.keys().next().value);
   return tc;
 }
+const DIAG = [];   // recent problems, for the problem report
+function diag(where, e) { const m = (e && (e.message || e.name)) || String(e); DIAG.push(`${new Date().toLocaleTimeString()} ${where}: ${m}`); if (DIAG.length > 12) DIAG.shift(); return m; }
+async function drawCanvas(page, vp, ds) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.floor(vp.width * ds); canvas.height = Math.floor(vp.height * ds);
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) { freeCanvas(canvas); throw new Error('the phone refused a drawing surface (out of canvas memory)'); }
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  try { await page.render({ canvasContext: ctx, viewport: vp, transform: ds !== 1 ? [ds, 0, 0, ds, 0, 0] : null }).promise; }
+  catch (e) { freeCanvas(canvas); throw e; }
+  return canvas;
+}
 async function renderPage(i) {
   const d = pageEls[i]; const tok = ++d._tok; const scale = S.scale;
-  let cv = null;
+  let page;
   try {
-    const page = await S.pdf.getPage(i + 1);
+    page = await S.pdf.getPage(i + 1);
     if (tok !== d._tok) return;
     const vp = page.getViewport({ scale });
     let ds = Math.min(window.devicePixelRatio || 1, LOWMEM ? 2 : 2.5);
     const maxPx = LOWMEM ? 4.5e6 : 14e6;
     const px = vp.width * vp.height * ds * ds; if (px > maxPx) ds *= Math.sqrt(maxPx / px);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.floor(vp.width * ds); canvas.height = Math.floor(vp.height * ds);
-    const ctx = canvas.getContext('2d', { alpha: false });
-    cv = canvas;
-    await page.render({ canvasContext: ctx, viewport: vp, transform: ds !== 1 ? [ds, 0, 0, ds, 0, 0] : null }).promise;
+    let canvas;
+    try { canvas = await drawCanvas(page, vp, ds); }
+    catch (e) {
+      if (e?.name === 'RenderingCancelledException') return;
+      diag('draw p' + (i + 1), e);
+      // free everything we can, then try once more at a lower resolution
+      for (const j of [...S.rendered]) if (j !== i && !visible.has(j)) unrender(j);
+      if (tok !== d._tok) return;
+      canvas = await drawCanvas(page, vp, 1);
+    }
     if (tok !== d._tok) { freeCanvas(canvas); return; }
-    const tl = document.createElement('div'); tl.className = 'textLayer';
-    const tc = await getText(i);
-    if (tok !== d._tok) { freeCanvas(canvas); return; }
-    const layer = new pdfjsLib.TextLayer({ textContentSource: tc, container: tl, viewport: vp });
-    await layer.render();
-    if (tok !== d._tok) { freeCanvas(canvas); return; }
+    // show the page straight away; the selectable text layer is added after
     const ov = document.createElement('div'); ov.className = 'overlay';
     freeCanvas(d.querySelector('canvas'));
-    d.replaceChildren(canvas, tl, ov);
+    d.replaceChildren(canvas, ov);
     d._scale = scale; delete d.dataset.stale; S.rendered.add(i);
-    decorateText(i);
-    buildOverlay(i, page, ov).catch(() => {});
+    buildOverlay(i, page, ov).catch(e => diag('links p' + (i + 1), e));
+    try {
+      const tc = await getText(i);
+      if (tok !== d._tok) return;
+      const tl = document.createElement('div'); tl.className = 'textLayer';
+      const layer = new pdfjsLib.TextLayer({ textContentSource: tc, container: tl, viewport: vp });
+      await layer.render();
+      if (tok !== d._tok) return;
+      d.insertBefore(tl, ov);
+      decorateText(i);
+    } catch (e) { diag('text p' + (i + 1), e); }
   } catch (e) {
-    if (cv && !cv.isConnected) freeCanvas(cv);
-    if (e?.name !== 'RenderingCancelledException') console.warn('render', i, e);
+    if (e?.name === 'RenderingCancelledException') return;
+    const m = diag('page p' + (i + 1), e);
+    if (tok === d._tok) {
+      d.innerHTML = `<span class="ph err">Page ${i + 1} couldn’t be drawn<br><small>${esc(m)}</small><br><button class="btn" data-retry="${i}">Try again</button></span>`;
+      if (!renderPage._warned) { renderPage._warned = true; toast('Some pages couldn’t be drawn. ⋮ → Copy problem report to send the details.', 6000); }
+    }
   }
 }
 
@@ -654,6 +681,7 @@ async function destToTarget(dest) {
 }
 
 pagesEl.addEventListener('click', async e => {
+  const rt = e.target.closest('[data-retry]'); if (rt) { const i = +rt.dataset.retry; pageEls[i]._scale = 0; renderPage(i); return; }
   const x = e.target.closest('span.x, .rowlink, .annlink');
   if (!x) return;
   if (x._t) { e.preventDefault(); go(x._t); }
@@ -1159,6 +1187,17 @@ $('#mOpen').onclick = () => { $('#menu').hidden = true; $('#fileIn').click(); };
 $('#mAmend').onclick = () => { $('#menu').hidden = true; if (S.pdf) $('#amendIn').click(); };
 $('#amendIn').onchange = e => { const f = e.target.files[0]; if (f) addAmendment(f); e.target.value = ''; };
 $('#mLibrary').onclick = () => { $('#menu').hidden = true; showWelcome(); };
+$('#mReport').onclick = async () => {
+  $('#menu').hidden = true;
+  const lines = ['Wiring Rules Reader problem report', 'App version: ' + APP_VERSION, 'PDF engine: ' + (pdfjsLib.version || '?'),
+    'Device: ' + UA, `Screen: ${screen.width}x${screen.height} @${devicePixelRatio}x · viewer ${viewer.clientWidth}px`,
+    `Mode: ${IOS ? 'iPhone/iPad' : SAFARI ? 'Safari' : 'standard'}${LOWMEM ? ', low-memory' : ''}${matchMedia('(display-mode: standalone)').matches ? ', installed app' : ', browser tab'}`,
+    'Document: ' + (S.pdf ? `${S.pdf.numPages} pages, indexed: ${S.A ? 'yes' : 'no'}, pages drawn now: ${S.rendered.size}` : 'none open'),
+    'Recent problems:', ...(DIAG.length ? DIAG : ['none recorded'])];
+  const txt = lines.join('\n');
+  try { await navigator.clipboard.writeText(txt); toast('Problem report copied — paste it into your chat with Claude', 4000); }
+  catch { showWelcome(`<pre style="white-space:pre-wrap;font-size:12px;user-select:text">${esc(txt)}</pre>`); }
+};
 $('#mReindex').onclick = async () => { $('#menu').hidden = true; if (!S.pdf) return; await db.del('analysis', S.id); S.A = null; startAnalysis(); };
 $('#backBtn').onclick = () => { try { if (history.state?.wrr) { history.back(); return; } } catch {} goBack(); };
 $('#pageChip').onclick = () => { $('#q').value = 'p '; $('#q').focus(); };
@@ -1650,7 +1689,7 @@ async function startAnalysis() {
     db.del('analysis', id + ':partial'); prefs.set('analysing', null);
     useAnalysis(A);
     toast(`Ready: ${A.toc.length} contents entries, ${Object.keys(A.tables).length || A.tableList.length} tables, ${A.index.filter(e => !e.letter).length} index terms`, 3500);
-  } catch (e) { if (e.message !== 'switched') { console.error(e); prefs.set('analysing', null); $('#progressTxt').textContent = 'Indexing stopped: ' + (e?.message || e) + '. Use ⋮ → Rebuild contents & index to try again.'; } return; }
+  } catch (e) { if (e.message !== 'switched') { console.error(e); diag('index', e); prefs.set('analysing', null); $('#progressTxt').textContent = 'Indexing stopped: ' + (e?.message || e) + '. Use ⋮ → Rebuild contents & index to try again.'; } return; }
   pr.hidden = true;
 }
 function useAnalysis(A) {
@@ -1708,8 +1747,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   } catch {}
 }
 // Show errors on screen so problems on a phone can be reported
-window.addEventListener('error', e => { if (e?.message && !/ResizeObserver|Script error/.test(e.message)) toast('Error: ' + e.message, 6000); });
-window.addEventListener('unhandledrejection', e => { const m = e?.reason?.message || String(e?.reason || ''); if (m && !/switched|cancel/i.test(m)) toast('Error: ' + m, 6000); });
+window.addEventListener('error', e => { if (e?.message) diag('app', e); if (e?.message && !/ResizeObserver|Script error/.test(e.message)) toast('Error: ' + e.message, 6000); });
+window.addEventListener('unhandledrejection', e => { const m = e?.reason?.message || String(e?.reason || ''); if (m) diag('app', e.reason); if (m && !/switched|cancel/i.test(m)) toast('Error: ' + m, 6000); });
 (async () => {
   const last = prefs.get('lastDoc', null);
   if (last) {
