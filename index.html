@@ -284,6 +284,7 @@ body.sub-doc #pages{padding-top:72px}
 .sv-move option{color:var(--ink)}
 /* highlights on the page */
 .hls{position:absolute;inset:0;pointer-events:none;z-index:0}
+.hl-pending{position:absolute;z-index:4;pointer-events:none;border-radius:2px;background:rgba(80,140,255,.18);outline:1.5px dashed rgba(40,100,230,.8)}
 .hlr{position:absolute;border-radius:2px;mix-blend-mode:multiply;opacity:.55}
 :root.dim-pages .hlr{mix-blend-mode:normal;opacity:.35}
 /* selection menu */
@@ -302,6 +303,7 @@ body.sub-doc #pages{padding-top:72px}
 .sm-row #smX{flex:0 0 36px}
 
 /* update alert bar */
+body.selmenu-open .updbar{display:none}
 .updbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + var(--sab));z-index:70;width:min(560px,calc(100% - 24px));display:flex;gap:12px;align-items:flex-start;background:var(--surface);color:var(--ink);border:1.5px solid var(--accent);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:12px 8px 12px 14px}
 .ub-ic{color:var(--accent);padding-top:2px}
 .ub-body{flex:1;min-width:0;display:grid;gap:4px}
@@ -605,6 +607,6 @@ body.sub-doc #pages{padding-top:72px}
 <div class="updbar" id="updBar" hidden role="status" aria-live="polite"></div>
 <div class="selmenu" id="selMenu" hidden role="menu"></div>
 <div class="toast" id="toast" hidden role="status"></div>
-<script type="module" src="app.js?v=13"></script>
+<script type="module" src="app.js?v=14"></script>
 </body>
 </html>

@@ -2,13 +2,13 @@
 // Everything runs on the device. The PDF is never uploaded.
 import './vendor/polyfills.js';
 import * as pdfjsLib from './vendor/pdf.min.js';
-import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=13';
-import { GUIDES } from './guides.js?v=13';
+import { NZ_DATES, TIMELINE, REGS_MODS, TOPICS, BUILT_IN_AMENDMENTS, HIGHLIGHTS } from './changes.js?v=14';
+import { GUIDES } from './guides.js?v=14';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.shim.js', import.meta.url).href;
 const STD_FONTS = new URL('./vendor/standard_fonts/', import.meta.url).href;
 const ANALYSIS_VERSION = 10;
-const APP_VERSION = '13 (24 Sep 2026)';
+const APP_VERSION = '14 (24 Sep 2026)';
 const UA = navigator.userAgent || '';
 const IOS = /iP(hone|ad|od)/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SAFARI = IOS || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg\//.test(UA));
@@ -779,7 +779,12 @@ viewer.addEventListener('touchend', () => {
   viewer.scrollLeft = pz.fx * pagesEl.scrollWidth - pz.cx;
 });
 let resizeT = 0;
-window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (S.pdf) layout(); updateBack(); }, 150); });
+let lastW = viewer.clientWidth;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => {
+  const w = viewer.clientWidth;
+  if (S.pdf && w !== lastW) layout();        // height-only changes (on-screen keyboard) don't need a relayout
+  lastW = w; updateBack();
+}, 150); });
 
 /* ================================================================== PANELS */
 function selectTab(tab, { open = true } = {}) {
@@ -1208,7 +1213,19 @@ $('#p-saved').addEventListener('click', async e => {
 
 /* ---------- highlighting in the PDF */
 const selMenu = () => $('#selMenu');
-function hideSelMenu() { const m = selMenu(); if (m) m.hidden = true; }
+function hideSelMenu() { const m = selMenu(); if (m) m.hidden = true; clearPendingMarks(); document.body.classList.remove('selmenu-open'); }
+function clearPendingMarks() { $$('.hl-pending').forEach(e => e.remove()); }
+function markPending(info) {
+  clearPendingMarks();
+  for (const pt of info.parts) {
+    const d = pageEls[pt.p]; if (!d) continue;
+    for (const r of pt.rects) {
+      const e = document.createElement('div'); e.className = 'hl-pending';
+      Object.assign(e.style, { left: r.x * 100 + '%', top: r.y * 100 + '%', width: r.w * 100 + '%', height: r.h * 100 + '%' });
+      d.appendChild(e);
+    }
+  }
+}
 function selectionInfo() {
   const sel = getSelection(); if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
   const range = sel.getRangeAt(0);
@@ -1244,14 +1261,22 @@ function mergeRects(rs) {
   return out.map(r => ({ x: +r.x.toFixed(4), y: +r.y.toFixed(4), w: +r.w.toFixed(4), h: +r.h.toFixed(4) }));
 }
 function placeMenu(m, x, y) {
-  m.hidden = false;
+  m.hidden = false; document.body.classList.add('selmenu-open');
   const w = m.offsetWidth, h = m.offsetHeight, W = innerWidth, H = innerHeight;
   m.style.left = Math.max(8, Math.min(W - w - 8, x - w / 2)) + 'px';
   m.style.top = (y + h + 12 > H ? Math.max(8, y - h - 40) : y + 12) + 'px';
 }
 let pendingSel = null;
+function liftMenu() {
+  // keep the menu in view above the on-screen keyboard
+  const m = selMenu(); if (!m || m.hidden) return;
+  const vv = window.visualViewport; const top = (vv ? vv.offsetTop : 0) + 8;
+  m.style.top = top + 'px';
+}
+window.visualViewport?.addEventListener('resize', () => { const m = selMenu(); if (m && !m.hidden && m.contains(document.activeElement)) liftMenu(); });
+document.addEventListener('focusin', e => { if (e.target.closest?.('#selMenu')) setTimeout(liftMenu, 60); });
 function showSelMenu(info, x, y) {
-  pendingSel = info;
+  pendingSel = info; markPending(info);
   const U = S.user; U.groups ||= [];
   const m = selMenu();
   m.innerHTML = `<div class="sm-h">Highlight and save to</div><div class="sm-groups">${U.groups.map(g => `<button data-addg="${g.id}"><i style="background:${g.color}"></i>${esc(g.name)}</button>`).join('')}<button data-addg=""><i style="background:${HL_COLORS[0]}"></i>No group</button></div>
@@ -1314,7 +1339,14 @@ let selT = 0;
 document.addEventListener('selectionchange', () => {
   if (!matchMedia('(pointer: coarse)').matches) return;
   clearTimeout(selT);
-  selT = setTimeout(() => { const info = selectionInfo(); if (info) showSelMenu(info, (info.box.left + info.box.right) / 2, info.box.bottom + 8); else if (pendingSel) hideSelMenu(); }, 450);
+  selT = setTimeout(() => {
+    const m = selMenu();
+    const busy = m && !m.hidden && (m.contains(document.activeElement) || (m.querySelector('.sm-new') && !m.querySelector('.sm-new').hidden));
+    if (busy) return;                                   // typing a group name: Android clears the selection, keep the menu
+    const info = selectionInfo();
+    if (info) showSelMenu(info, (info.box.left + info.box.right) / 2, info.box.bottom + 8);
+    else if (pendingSel) hideSelMenu();
+  }, 450);
 });
 document.addEventListener('pointerdown', e => { const m = selMenu(); if (m && !m.hidden && !m.contains(e.target)) { if (!pendingSel || !e.target.closest('.textLayer')) hideSelMenu(); } }, true);
 viewer.addEventListener('scroll', () => { if (!matchMedia('(pointer: coarse)').matches) hideSelMenu(); }, { passive: true });
@@ -1323,7 +1355,7 @@ document.addEventListener('click', async e => {
   const m = selMenu(); if (!m || m.hidden || !m.contains(e.target)) return;
   const t = e.target; const U = S.user;
   const ag = t.closest('[data-addg]'); if (ag && pendingSel) { addHighlight(pendingSel, ag.dataset.addg || null); return; }
-  if (t.closest('#smNew')) { m.querySelector('.sm-new').hidden = false; m.querySelector('#smName').focus(); return; }
+  if (t.closest('#smNew')) { m.querySelector('.sm-new').hidden = false; liftMenu(); m.querySelector('#smName').focus(); return; }
   const sw = t.closest('.sm-new [data-col]'); if (sw) { m.querySelectorAll('.sm-new [data-col]').forEach(b => b.setAttribute('aria-pressed', b === sw)); return; }
   if (t.closest('#smCreate') && pendingSel) {
     const name = clean(m.querySelector('#smName').value); if (!name) { m.querySelector('#smName').focus(); return; }
